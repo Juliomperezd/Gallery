@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Upload — Refs</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0d0d0d;
+    color: #ccc;
+    font-family: 'Inter', 'Helvetica Neue', sans-serif;
+    min-height: 100vh;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 24px;
+    border-bottom: 1px solid #1e1e1e;
+  }
+  header h1 {
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #888;
+  }
+  header a {
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #555;
+    text-decoration: none;
+    transition: color 0.15s;
+  }
+  header a:hover { color: #ccc; }
+
+  main {
+    max-width: 640px;
+    margin: 60px auto;
+    padding: 0 24px;
+  }
+
+  #drop-zone {
+    border: 1px dashed #2a2a2a;
+    border-radius: 6px;
+    padding: 60px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    position: relative;
+  }
+  #drop-zone.over { border-color: #555; background: #141414; }
+  #drop-zone p { font-size: 13px; color: #444; letter-spacing: 0.04em; pointer-events: none; }
+  #drop-zone p span { display: block; margin-top: 6px; font-size: 11px; color: #333; }
+  #file-input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* Tags section */
+  #tags-section {
+    margin-top: 22px;
+    display: none;
+  }
+  #tags-section label {
+    display: block;
+    font-size: 11px;
+    color: #444;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .tags-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+  .tags-chip {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    background: #1a1a1a;
+    border-radius: 20px;
+    font-size: 12px;
+    color: #aaa;
+    border: 1px solid #2a2a2a;
+  }
+  .tags-chip-rm {
+    background: none;
+    border: none;
+    color: #555;
+    cursor: pointer;
+    font-size: 15px;
+    line-height: 1;
+    padding: 0 0 0 2px;
+  }
+  .tags-chip-rm:hover { color: #fff; }
+  .tags-input-row input {
+    width: 100%;
+    background: #111;
+    border: 1px solid #1e1e1e;
+    border-radius: 4px;
+    color: #ccc;
+    font-size: 13px;
+    padding: 8px 11px;
+    outline: none;
+    font-family: inherit;
+  }
+  .tags-input-row input:focus { border-color: #333; }
+  .tags-input-row input::placeholder { color: #2e2e2e; }
+
+  /* File previews */
+  #previews {
+    margin-top: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .preview-item {
+    display: grid;
+    grid-template-columns: 52px 1fr auto;
+    align-items: center;
+    gap: 12px;
+    background: #111;
+    border-radius: 4px;
+    padding: 10px 12px;
+    border: 1px solid #1a1a1a;
+  }
+  .preview-item img {
+    width: 52px;
+    height: 40px;
+    object-fit: cover;
+    border-radius: 3px;
+    background: #1a1a1a;
+  }
+  .preview-info { overflow: hidden; }
+  .preview-name { font-size: 12px; color: #bbb; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .preview-size { font-size: 10px; color: #444; margin-top: 3px; }
+  .preview-bar-wrap {
+    height: 2px;
+    background: #1e1e1e;
+    border-radius: 2px;
+    margin-top: 6px;
+    overflow: hidden;
+  }
+  .preview-bar { height: 100%; width: 0%; background: #fff; border-radius: 2px; transition: width 0.15s; }
+  .preview-state { font-size: 11px; color: #444; white-space: nowrap; min-width: 54px; text-align: right; }
+  .preview-state.ok  { color: #5a8a5a; }
+  .preview-state.err { color: #8a3a3a; }
+
+  #actions {
+    margin-top: 28px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+  #upload-btn {
+    padding: 10px 28px;
+    background: #fff;
+    color: #0d0d0d;
+    border: none;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: opacity 0.15s;
+    font-family: inherit;
+  }
+  #upload-btn:disabled { opacity: 0.3; cursor: default; }
+  #gallery-link {
+    font-size: 12px;
+    color: #444;
+    text-decoration: none;
+    letter-spacing: 0.05em;
+    transition: color 0.15s;
+  }
+  #gallery-link:hover { color: #ccc; }
+  #global-status { margin-top: 20px; font-size: 12px; color: #555; letter-spacing: 0.04em; min-height: 16px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Upload</h1>
+  <a href="index.html">← Gallery</a>
+</header>
+
+<main>
+  <div id="drop-zone">
+    <input type="file" id="file-input" multiple accept="image/*">
+    <p>
+      Drop images here or click to browse
+      <span>PNG, JPG, GIF, WEBP · no limit per file</span>
+    </p>
+  </div>
+
+  <div id="tags-section">
+    <label>Tags — applied to all images in this batch</label>
+    <div id="upload-chips" class="tags-chips"></div>
+    <div class="tags-input-row">
+      <input id="upload-tag-input" type="text" placeholder="Type a tag and press Enter or comma…">
+    </div>
+  </div>
+
+  <div id="previews"></div>
+
+  <div id="actions" style="display:none">
+    <button id="upload-btn">Upload</button>
+    <a href="index.html" id="gallery-link">View gallery →</a>
+  </div>
+
+  <div id="global-status"></div>
+</main>
+
+<script type="module">
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+const BUCKET   = 'images';
+
+const dropZone       = document.getElementById('drop-zone');
+const fileInput      = document.getElementById('file-input');
+const tagsSection    = document.getElementById('tags-section');
+const uploadChips    = document.getElementById('upload-chips');
+const uploadTagInput = document.getElementById('upload-tag-input');
+const previews       = document.getElementById('previews');
+const actions        = document.getElementById('actions');
+const uploadBtn      = document.getElementById('upload-btn');
+const globalSt       = document.getElementById('global-status');
+
+let queue      = [];
+let uploadTags = [];
+
+// ── Tag input ────────────────────────────────────────────────────────────────
+
+function addUploadTag() {
+  const val = uploadTagInput.value.trim().toLowerCase();
+  if (!val || uploadTags.includes(val)) { uploadTagInput.value = ''; return; }
+  uploadTags.push(val);
+  uploadTagInput.value = '';
+  renderUploadChips();
+}
+
+function renderUploadChips() {
+  uploadChips.innerHTML = '';
+  for (const tag of uploadTags) {
+    const chip = document.createElement('div');
+    chip.className = 'tags-chip';
+    const lbl = document.createElement('span');
+    lbl.textContent = tag;
+    const rm = document.createElement('button');
+    rm.className = 'tags-chip-rm';
+    rm.textContent = '×';
+    rm.addEventListener('click', () => { uploadTags = uploadTags.filter(t => t !== tag); renderUploadChips(); });
+    chip.append(lbl, rm);
+    uploadChips.appendChild(chip);
+  }
+}
+
+uploadTagInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addUploadTag(); }
+});
+
+// ── File queue ───────────────────────────────────────────────────────────────
+
+function formatBytes(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1024 ** 2) return (b / 1024).toFixed(0) + ' KB';
+  return (b / 1024 ** 2).toFixed(1) + ' MB';
+}
+
+function uniqueName(name) {
+  const ts  = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
+  const dot  = name.lastIndexOf('.');
+  const base = dot > -1 ? name.slice(0, dot) : name;
+  const ext  = dot > -1 ? name.slice(dot)    : '';
+  return `ref_${ts}_${base}${ext}`;
+}
+
+function addFiles(files) {
+  for (const file of files) {
+    if (!/^image\//i.test(file.type)) continue;
+
+    const item = document.createElement('div');
+    item.className = 'preview-item';
+
+    const img = document.createElement('img');
+    img.src = URL.createObjectURL(file);
+
+    const info = document.createElement('div');
+    info.className = 'preview-info';
+
+    const nameEl = document.createElement('div');
+    nameEl.className = 'preview-name';
+    nameEl.textContent = file.name;
+
+    const sizeEl = document.createElement('div');
+    sizeEl.className = 'preview-size';
+    sizeEl.textContent = formatBytes(file.size);
+
+    const barWrap = document.createElement('div');
+    barWrap.className = 'preview-bar-wrap';
+    const bar = document.createElement('div');
+    bar.className = 'preview-bar';
+    barWrap.appendChild(bar);
+
+    info.append(nameEl, sizeEl, barWrap);
+
+    const stateEl = document.createElement('div');
+    stateEl.className = 'preview-state';
+    stateEl.textContent = 'Ready';
+
+    item.append(img, info, stateEl);
+    previews.appendChild(item);
+    queue.push({ file, bar, stateEl });
+  }
+
+  if (queue.length > 0) {
+    actions.style.display = 'flex';
+    tagsSection.style.display = 'block';
+  }
+}
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('over'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('over'); addFiles(e.dataTransfer.files); });
+fileInput.addEventListener('change', () => { addFiles(fileInput.files); fileInput.value = ''; });
+
+// ── Upload ───────────────────────────────────────────────────────────────────
+
+uploadBtn.addEventListener('click', async () => {
+  const pending = queue.filter(q => q.stateEl.textContent === 'Ready');
+  if (!pending.length) return;
+
+  uploadBtn.disabled = true;
+  globalSt.textContent = `Uploading ${pending.length} file${pending.length > 1 ? 's' : ''}…`;
+
+  let done = 0;
+  for (const item of pending) {
+    item.stateEl.textContent = '…';
+    item.bar.style.width = '30%';
+
+    const targetName = uniqueName(item.file.name);
+    const { error } = await supabase.storage.from(BUCKET).upload(targetName, item.file, {
+      cacheControl: '3600',
+      upsert: false
+    });
+
+    item.bar.style.width = '100%';
+
+    if (error) {
+      item.stateEl.textContent = 'Error';
+      item.stateEl.classList.add('err');
+    } else {
+      if (uploadTags.length > 0) {
+        await supabase.from('image_meta').upsert({ filename: targetName, tags: uploadTags });
+      }
+      item.stateEl.textContent = 'Done ✓';
+      item.stateEl.classList.add('ok');
+      done++;
+    }
+  }
+
+  globalSt.textContent = `${done} of ${pending.length} uploaded.`;
+  uploadBtn.disabled = false;
+  queue = queue.filter(q => q.stateEl.textContent === 'Error');
+});
+</script>
+
+<script src="config.js"></script>
+<script src="auth.js"></script>
+</body>
+</html>

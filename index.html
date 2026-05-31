@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Refs</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0d0d0d;
+    color: #ccc;
+    font-family: 'Inter', 'Helvetica Neue', sans-serif;
+    min-height: 100vh;
+  }
+
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 24px;
+    background: rgba(13,13,13,0.95);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid #1e1e1e;
+  }
+  header h1 { font-size: 13px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: #888; }
+  #header-actions { display: flex; align-items: center; gap: 8px; }
+  header a, #tags-manager-btn {
+    font-size: 12px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase;
+    color: #fff; text-decoration: none; padding: 6px 14px; border: 1px solid #333; border-radius: 4px;
+    transition: border-color 0.15s; background: none; cursor: pointer; font-family: inherit;
+  }
+  header a:hover, #tags-manager-btn:hover { border-color: #888; }
+
+  /* Filter bar */
+  #filter-bar {
+    position: sticky;
+    top: 49px;
+    z-index: 9;
+    display: flex;
+    gap: 6px;
+    padding: 10px 14px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    background: rgba(13,13,13,0.95);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid #181818;
+  }
+  #filter-bar:empty { display: none; }
+  #filter-bar::-webkit-scrollbar { display: none; }
+  .filter-btn {
+    flex-shrink: 0; padding: 5px 13px; border-radius: 20px; border: 1px solid #222;
+    background: none; color: #555; font-size: 11px; letter-spacing: 0.05em;
+    cursor: pointer; transition: all 0.15s; white-space: nowrap; font-family: inherit;
+  }
+  .filter-btn:hover { border-color: #444; color: #aaa; }
+  .filter-btn.active { background: #fff; color: #0d0d0d; border-color: #fff; }
+
+  #status { text-align: center; padding: 80px 24px; font-size: 13px; color: #444; letter-spacing: 0.05em; }
+
+  /* Grid */
+  #grid { columns: 10; column-gap: 2px; padding: 2px; }
+  @media (max-width: 1100px) { #grid { columns: 7; } }
+  @media (max-width: 700px)  { #grid { columns: 4; } }
+
+  .thumb {
+    position: relative; break-inside: avoid; margin-bottom: 3px;
+    overflow: hidden; cursor: pointer; background: #111; display: block;
+  }
+  .thumb img { width: 100%; height: auto; display: block; transition: transform 0.35s ease, opacity 0.3s; opacity: 0; }
+  .thumb img.loaded { opacity: 1; }
+  .thumb:hover img { transform: scale(1.03); }
+
+  /* Lightbox */
+  #lightbox {
+    border: none; background: transparent; padding: 0;
+    max-width: 100vw; max-height: 100vh; outline: none;
+  }
+  #lightbox::backdrop { background: rgba(0,0,0,0.93); cursor: pointer; }
+
+  #lb-wrap {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    width: 100vw; height: 100vh; gap: 16px; position: relative;
+  }
+
+  #lb-img {
+    max-width: 88vw; max-height: 78vh;
+    object-fit: contain; border-radius: 2px;
+    box-shadow: 0 0 60px rgba(0,0,0,0.8);
+  }
+
+  #lb-close {
+    position: absolute; top: 20px; right: 24px;
+    background: none; border: none; color: #666; font-size: 28px;
+    cursor: pointer; line-height: 1; transition: color 0.15s;
+  }
+  #lb-close:hover { color: #fff; }
+
+  #lb-footer {
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+  }
+
+  #lb-name { font-size: 11px; color: #444; letter-spacing: 0.06em; }
+
+  #lb-tags {
+    display: flex; flex-wrap: wrap; gap: 6px; justify-content: center;
+    max-width: 600px;
+  }
+
+  .lb-tag {
+    font-size: 11px; padding: 4px 12px; border-radius: 20px;
+    background: rgba(255,255,255,0.1); color: #ccc; letter-spacing: 0.04em;
+    cursor: pointer; border: 1px solid transparent;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .lb-tag:hover { background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.15); }
+
+  #lb-footer-actions { display: flex; gap: 8px; }
+
+  #lb-edit-btn, #lb-delete-btn {
+    background: none; border: 1px solid #2a2a2a; border-radius: 4px;
+    font-size: 11px; padding: 5px 14px; cursor: pointer;
+    font-family: inherit; letter-spacing: 0.05em; transition: color 0.15s, border-color 0.15s;
+  }
+  #lb-edit-btn { color: #444; }
+  #lb-edit-btn:hover { color: #ccc; border-color: #555; }
+  #lb-delete-btn { color: #6a2a2a; border-color: #2a1a1a; }
+  #lb-delete-btn:hover { color: #e05555; border-color: #6a2a2a; }
+
+  /* Tag editor */
+  #tag-editor {
+    background: #161616; border: 1px solid #2a2a2a; border-radius: 10px;
+    padding: 22px; width: 360px; max-width: 92vw;
+  }
+  #tag-editor::backdrop { background: rgba(0,0,0,0.75); }
+  #tag-editor h3 { font-size: 11px; font-weight: 500; color: #555; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 16px; }
+  .te-chips { display: flex; flex-wrap: wrap; gap: 6px; min-height: 28px; margin-bottom: 14px; }
+  .te-chip { display: flex; align-items: center; gap: 4px; padding: 4px 10px; background: #222; border-radius: 20px; font-size: 12px; color: #bbb; }
+  .te-chip-rm { background: none; border: none; color: #555; cursor: pointer; font-size: 15px; line-height: 1; padding: 0 0 0 2px; }
+  .te-chip-rm:hover { color: #fff; }
+  .te-input-row { display: flex; gap: 8px; margin-bottom: 18px; }
+  .te-input-row input {
+    flex: 1; background: #111; border: 1px solid #252525; border-radius: 6px;
+    color: #ccc; font-size: 13px; padding: 8px 11px; outline: none; font-family: inherit;
+  }
+  .te-input-row input:focus { border-color: #444; }
+  .te-input-row input::placeholder { color: #333; }
+  .te-add-btn { padding: 8px 14px; background: #1e1e1e; border: 1px solid #2a2a2a; border-radius: 6px; color: #888; font-size: 12px; cursor: pointer; font-family: inherit; }
+  .te-add-btn:hover { color: #ccc; }
+  .te-actions { display: flex; justify-content: flex-end; gap: 8px; }
+  .te-cancel { padding: 8px 18px; background: none; border: 1px solid #2a2a2a; border-radius: 6px; color: #555; font-size: 12px; cursor: pointer; font-family: inherit; }
+  .te-cancel:hover { color: #aaa; }
+  .te-save { padding: 8px 20px; background: #fff; border: none; border-radius: 6px; color: #0d0d0d; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
+  .te-save:hover { opacity: 0.88; }
+
+  /* Tag description panel */
+  #tag-desc-panel {
+    display: none;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 12px 24px 14px;
+    border-bottom: 1px solid #181818;
+    background: #0d0d0d;
+  }
+  #tag-desc-panel.visible { display: flex; }
+  #tag-desc-text {
+    flex: 1;
+    font-size: 12px;
+    color: #555;
+    line-height: 1.7;
+    letter-spacing: 0.02em;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  #tag-desc-text.empty { color: #2e2e2e; font-style: italic; }
+  #tag-desc-text a { color: #666; text-decoration: underline; text-underline-offset: 2px; }
+  #tag-desc-text a:hover { color: #aaa; }
+  #tag-desc-edit {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    color: #444;
+    font-size: 15px;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+    margin-top: 1px;
+    transition: color 0.15s;
+  }
+  #tag-desc-edit:hover { color: #ccc; }
+
+  /* Description editor dialog */
+  #desc-editor {
+    background: #161616;
+    border: 1px solid #2a2a2a;
+    border-radius: 10px;
+    padding: 22px;
+    width: 420px;
+    max-width: 92vw;
+  }
+  #desc-editor::backdrop { background: rgba(0,0,0,0.75); }
+  #desc-editor h3 { font-size: 11px; font-weight: 500; color: #555; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 14px; }
+  #desc-editor p.hint { font-size: 11px; color: #333; margin-bottom: 10px; letter-spacing: 0.02em; }
+  #desc-textarea {
+    width: 100%;
+    background: #111;
+    border: 1px solid #252525;
+    border-radius: 6px;
+    color: #ccc;
+    font-size: 13px;
+    padding: 10px 11px;
+    outline: none;
+    font-family: inherit;
+    resize: vertical;
+    min-height: 100px;
+    margin-bottom: 16px;
+    line-height: 1.6;
+  }
+  #desc-textarea:focus { border-color: #444; }
+  #desc-textarea::placeholder { color: #333; }
+
+  /* Tags Manager dialog */
+  #tags-manager {
+    background: #161616; border: 1px solid #2a2a2a; border-radius: 10px;
+    padding: 0; width: 560px; max-width: 95vw; max-height: 80vh;
+    overflow: hidden;
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); margin: 0;
+  }
+  #tags-manager[open] { display: flex; flex-direction: column; }
+  #tags-manager::backdrop { background: rgba(0,0,0,0.82); }
+  #tm-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 22px 14px; border-bottom: 1px solid #222; flex-shrink: 0;
+  }
+  #tm-header h3 { font-size: 11px; font-weight: 500; color: #555; letter-spacing: 0.1em; text-transform: uppercase; }
+  #tm-close { background: none; border: none; color: #444; font-size: 22px; cursor: pointer; line-height: 1; padding: 0; transition: color 0.15s; }
+  #tm-close:hover { color: #ccc; }
+  #tm-new { display: flex; gap: 8px; padding: 14px 22px; border-bottom: 1px solid #1e1e1e; flex-shrink: 0; }
+  #tm-new-name {
+    flex: 1; background: #111; border: 1px solid #222; border-radius: 5px;
+    color: #ccc; font-size: 13px; padding: 7px 11px; outline: none; font-family: inherit;
+  }
+  #tm-new-name:focus { border-color: #444; }
+  #tm-new-name::placeholder { color: #2e2e2e; }
+  #tm-new-add {
+    padding: 7px 16px; background: #1e1e1e; border: 1px solid #2a2a2a; border-radius: 5px;
+    color: #888; font-size: 12px; cursor: pointer; font-family: inherit; white-space: nowrap; transition: color 0.15s, border-color 0.15s;
+  }
+  #tm-new-add:hover { color: #ccc; border-color: #444; }
+  #tm-list { overflow-y: auto; flex: 1; padding: 6px 0; }
+  #tm-list::-webkit-scrollbar { width: 3px; }
+  #tm-list::-webkit-scrollbar-thumb { background: #222; border-radius: 2px; }
+  .tm-empty { text-align: center; padding: 40px 24px; font-size: 13px; color: #333; letter-spacing: 0.04em; }
+  .tm-row { padding: 12px 22px; border-bottom: 1px solid #1c1c1c; }
+  .tm-row:last-child { border-bottom: none; }
+  .tm-row-top { display: flex; align-items: center; gap: 10px; }
+  .tm-tag-name { font-size: 13px; color: #ccc; font-weight: 500; flex: 1; }
+  .tm-tag-count { font-size: 10px; color: #333; letter-spacing: 0.05em; white-space: nowrap; }
+  .tm-row-actions { display: flex; gap: 2px; }
+  .tm-edit-btn, .tm-del-btn {
+    background: none; border: none; cursor: pointer; font-size: 14px;
+    padding: 3px 7px; border-radius: 3px; transition: color 0.15s, background 0.15s; line-height: 1;
+  }
+  .tm-edit-btn { color: #3a3a3a; }
+  .tm-edit-btn:hover { color: #ccc; background: #222; }
+  .tm-del-btn { color: #3a2222; }
+  .tm-del-btn:hover { color: #e05555; background: #2a1a1a; }
+  .tm-desc-view { font-size: 11px; color: #3a3a3a; margin-top: 5px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+  .tm-desc-view.has-content { color: #555; }
+  .tm-desc-edit { margin-top: 8px; }
+  .tm-desc-ta {
+    width: 100%; background: #111; border: 1px solid #252525; border-radius: 5px;
+    color: #ccc; font-size: 12px; padding: 8px 10px; outline: none; font-family: inherit;
+    resize: vertical; min-height: 70px; line-height: 1.5;
+  }
+  .tm-desc-ta:focus { border-color: #333; }
+  .tm-edit-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Refs</h1>
+  <div id="header-actions">
+    <button id="tags-manager-btn">Tags</button>
+    <a href="upload.html">+ Upload</a>
+  </div>
+</header>
+
+<div id="filter-bar"></div>
+<div id="tag-desc-panel">
+  <p id="tag-desc-text"></p>
+  <button id="tag-desc-edit" title="Edit description">✎</button>
+</div>
+<div id="status">Loading…</div>
+<div id="grid"></div>
+
+<dialog id="lightbox">
+  <div id="lb-wrap">
+    <button id="lb-close" aria-label="Close">×</button>
+    <img id="lb-img" src="" alt="">
+    <div id="lb-footer">
+      <span id="lb-name"></span>
+      <div id="lb-tags"></div>
+      <div id="lb-footer-actions">
+        <button id="lb-edit-btn">✏ Edit tags</button>
+        <button id="lb-delete-btn">Delete</button>
+      </div>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="tags-manager">
+  <div id="tm-header">
+    <h3>Tags</h3>
+    <button id="tm-close">×</button>
+  </div>
+  <div id="tm-new">
+    <input id="tm-new-name" type="text" placeholder="Nuevo tag…">
+    <button id="tm-new-add">+ Añadir</button>
+  </div>
+  <div id="tm-list"></div>
+</dialog>
+
+<dialog id="desc-editor">
+  <h3 id="desc-editor-title">Description</h3>
+  <p class="hint">URLs se convierten en links automáticamente.</p>
+  <textarea id="desc-textarea" placeholder="Escribe una descripción…"></textarea>
+  <div class="te-actions">
+    <button class="te-cancel" id="desc-cancel">Cancel</button>
+    <button class="te-save" id="desc-save">Save</button>
+  </div>
+</dialog>
+
+<dialog id="tag-editor">
+  <h3>Tags</h3>
+  <div id="te-chips" class="te-chips"></div>
+  <div class="te-input-row">
+    <input id="te-input" type="text" placeholder="Add a tag…">
+    <button class="te-add-btn" id="te-add">Add</button>
+  </div>
+  <div class="te-actions">
+    <button class="te-cancel" id="te-cancel">Cancel</button>
+    <button class="te-save" id="te-save">Save</button>
+  </div>
+</dialog>
+
+<script src="config.js"></script>
+<script src="auth.js"></script>
+<script type="module">
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+const supabase  = createClient(SUPABASE_URL, SUPABASE_KEY);
+const BUCKET    = 'images';
+const grid      = document.getElementById('grid');
+const status    = document.getElementById('status');
+const filterBar = document.getElementById('filter-bar');
+const lb        = document.getElementById('lightbox');
+const lbImg     = document.getElementById('lb-img');
+const lbName    = document.getElementById('lb-name');
+const lbTags    = document.getElementById('lb-tags');
+const lbEditBtn = document.getElementById('lb-edit-btn');
+const tagDlg    = document.getElementById('tag-editor');
+const teChips   = document.getElementById('te-chips');
+const teInput   = document.getElementById('te-input');
+
+let metaMap       = {};
+let tagDescMap    = {};
+let thumbRegistry = [];
+let currentFilter = null;
+let lbFilename    = null;
+let editTags      = [];
+
+// ── Load ─────────────────────────────────────────────────────────────────────
+
+async function load() {
+  const [storageRes, metaRes, tagDescRes] = await Promise.all([
+    supabase.storage.from(BUCKET).list('', { limit: 500, sortBy: { column: 'created_at', order: 'desc' } }),
+    supabase.from('image_meta').select('filename, tags'),
+    supabase.from('tag_meta').select('tag, description')
+  ]);
+
+  if (storageRes.error) { status.textContent = 'Error: ' + storageRes.error.message; return; }
+
+  for (const row of (metaRes.data || [])) {
+    metaMap[row.filename] = row.tags || [];
+  }
+
+  for (const row of (tagDescRes.data || [])) {
+    tagDescMap[row.tag] = row.description || '';
+  }
+
+  const imgs = (storageRes.data || []).filter(f => /\.(png|jpe?g|gif|webp|avif|svg)$/i.test(f.name));
+  if (!imgs.length) { status.textContent = 'No images yet. Upload some!'; return; }
+  status.style.display = 'none';
+
+  for (const file of imgs) {
+    const { data: { publicUrl } } = supabase.storage.from(BUCKET).getPublicUrl(file.name);
+    const card = buildThumb(publicUrl, file.name);
+    thumbRegistry.push({ el: card, filename: file.name });
+    grid.appendChild(card);
+  }
+
+  buildFilterBar();
+}
+
+// ── Thumb ─────────────────────────────────────────────────────────────────────
+
+function buildThumb(url, filename) {
+  const card = document.createElement('div');
+  card.className = 'thumb';
+
+  const img = document.createElement('img');
+  img.loading = 'lazy';
+  img.src = url;
+  img.alt = filename;
+  img.onload = () => img.classList.add('loaded');
+
+  card.appendChild(img);
+  card.addEventListener('click', () => openLightbox(url, filename));
+  return card;
+}
+
+// ── Filter bar ────────────────────────────────────────────────────────────────
+
+function buildFilterBar() {
+  const allTags = new Set(Object.values(metaMap).flat());
+  filterBar.innerHTML = '';
+  if (!allTags.size) return;
+
+  addFilterBtn('All', null, true);
+  [...allTags].sort().forEach(t => addFilterBtn(t, t, false));
+}
+
+function addFilterBtn(label, tag, active) {
+  const btn = document.createElement('button');
+  btn.className = 'filter-btn' + (active ? ' active' : '');
+  btn.textContent = label;
+  btn.addEventListener('click', () => {
+    currentFilter = tag;
+    filterBar.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    thumbRegistry.forEach(({ el, filename }) => {
+      el.style.display = (!tag || (metaMap[filename] || []).includes(tag)) ? '' : 'none';
+    });
+    showDescPanel(tag);
+  });
+  filterBar.appendChild(btn);
+}
+
+// ── Tag description panel ─────────────────────────────────────────────────────
+
+const descPanel    = document.getElementById('tag-desc-panel');
+const descText     = document.getElementById('tag-desc-text');
+const descEditBtn  = document.getElementById('tag-desc-edit');
+const descDlg      = document.getElementById('desc-editor');
+const descTextarea = document.getElementById('desc-textarea');
+
+function autoLink(text) {
+  const escaped = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  return escaped.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+}
+
+function showDescPanel(tag) {
+  if (!tag) { descPanel.classList.remove('visible'); return; }
+  descPanel.classList.add('visible');
+  const desc = tagDescMap[tag] || '';
+  if (desc) {
+    descText.innerHTML = autoLink(desc);
+    descText.classList.remove('empty');
+  } else {
+    descText.textContent = 'Sin descripción — pulsa ✎ para añadir una.';
+    descText.classList.add('empty');
+  }
+}
+
+descEditBtn.addEventListener('click', () => {
+  if (!currentFilter) return;
+  document.getElementById('desc-editor-title').textContent = currentFilter;
+  descTextarea.value = tagDescMap[currentFilter] || '';
+  descDlg.showModal();
+});
+
+document.getElementById('desc-cancel').addEventListener('click', () => descDlg.close());
+
+document.getElementById('desc-save').addEventListener('click', async () => {
+  const val = descTextarea.value.trim();
+  const { error } = await supabase.from('tag_meta').upsert({ tag: currentFilter, description: val });
+  if (!error) {
+    tagDescMap[currentFilter] = val;
+    showDescPanel(currentFilter);
+    descDlg.close();
+  }
+});
+
+// ── Lightbox ──────────────────────────────────────────────────────────────────
+
+function openLightbox(url, filename) {
+  lbFilename    = filename;
+  lbImg.src     = url;
+  lbName.textContent = filename;
+  renderLbTags(metaMap[filename] || []);
+  lb.showModal();
+}
+
+function renderLbTags(tags) {
+  lbTags.innerHTML = '';
+  for (const tag of tags) {
+    const chip = document.createElement('span');
+    chip.className = 'lb-tag';
+    chip.textContent = tag;
+    chip.addEventListener('click', () => {
+      lb.close();
+      filterByTag(tag);
+    });
+    lbTags.appendChild(chip);
+  }
+}
+
+function filterByTag(tag) {
+  currentFilter = tag;
+  buildFilterBar();
+  filterBar.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.textContent === tag);
+  });
+  thumbRegistry.forEach(({ el, filename }) => {
+    el.style.display = (metaMap[filename] || []).includes(tag) ? '' : 'none';
+  });
+  showDescPanel(tag);
+}
+
+document.getElementById('lb-close').addEventListener('click', () => lb.close());
+lb.addEventListener('click', e => { if (e.target === lb || e.target.id === 'lb-wrap') lb.close(); });
+
+lbEditBtn.addEventListener('click', e => {
+  e.stopPropagation();
+  openEditor(lbFilename);
+});
+
+document.getElementById('lb-delete-btn').addEventListener('click', async e => {
+  e.stopPropagation();
+  if (!confirm(`Delete "${lbFilename}"?`)) return;
+
+  await Promise.all([
+    supabase.storage.from(BUCKET).remove([lbFilename]),
+    supabase.from('image_meta').delete().eq('filename', lbFilename)
+  ]);
+
+  // Remove thumb from DOM and registry
+  const idx = thumbRegistry.findIndex(t => t.filename === lbFilename);
+  if (idx > -1) {
+    thumbRegistry[idx].el.remove();
+    thumbRegistry.splice(idx, 1);
+  }
+  delete metaMap[lbFilename];
+  buildFilterBar();
+  lb.close();
+});
+
+// ── Tag editor ────────────────────────────────────────────────────────────────
+
+function openEditor(filename) {
+  editTags = [...(metaMap[filename] || [])];
+  teInput.value = '';
+  renderEditorChips();
+  tagDlg.showModal();
+}
+
+function renderEditorChips() {
+  teChips.innerHTML = '';
+  for (const tag of editTags) {
+    const chip = document.createElement('div');
+    chip.className = 'te-chip';
+    const lbl = document.createElement('span');
+    lbl.textContent = tag;
+    const rm = document.createElement('button');
+    rm.className = 'te-chip-rm';
+    rm.textContent = '×';
+    rm.addEventListener('click', () => { editTags = editTags.filter(t => t !== tag); renderEditorChips(); });
+    chip.append(lbl, rm);
+    teChips.appendChild(chip);
+  }
+}
+
+function commitTag() {
+  const val = teInput.value.trim().toLowerCase();
+  if (!val || editTags.includes(val)) { teInput.value = ''; return; }
+  editTags.push(val);
+  teInput.value = '';
+  renderEditorChips();
+}
+
+document.getElementById('te-add').addEventListener('click', commitTag);
+teInput.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); commitTag(); } });
+document.getElementById('te-cancel').addEventListener('click', () => tagDlg.close());
+
+document.getElementById('te-save').addEventListener('click', async () => {
+  const { error } = await supabase.from('image_meta').upsert({ filename: lbFilename, tags: editTags });
+  if (!error) {
+    metaMap[lbFilename] = editTags;
+    renderLbTags(editTags);
+    buildFilterBar();
+    tagDlg.close();
+  }
+});
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { lb.close(); tagDlg.close(); } });
+
+// ── Tags Manager ──────────────────────────────────────────────────────────────
+
+const tagsMgr    = document.getElementById('tags-manager');
+const tmList     = document.getElementById('tm-list');
+const tmNewName  = document.getElementById('tm-new-name');
+
+function getAllTags() {
+  const all = new Set([...Object.values(metaMap).flat(), ...Object.keys(tagDescMap)]);
+  return [...all].sort();
+}
+
+function imageCountForTag(tag) {
+  return Object.values(metaMap).filter(tags => tags.includes(tag)).length;
+}
+
+function renderTagsManager() {
+  const tags = getAllTags();
+  tmList.innerHTML = '';
+  if (!tags.length) {
+    tmList.innerHTML = '<p class="tm-empty">No hay tags todavía.</p>';
+    return;
+  }
+  for (const tag of tags) tmList.appendChild(buildTagRow(tag));
+}
+
+function buildTagRow(tag) {
+  const count = imageCountForTag(tag);
+  const desc  = tagDescMap[tag] || '';
+
+  const row = document.createElement('div');
+  row.className = 'tm-row';
+
+  const top = document.createElement('div');
+  top.className = 'tm-row-top';
+
+  const nameEl = document.createElement('span');
+  nameEl.className = 'tm-tag-name';
+  nameEl.textContent = tag;
+
+  const countEl = document.createElement('span');
+  countEl.className = 'tm-tag-count';
+  countEl.textContent = count === 1 ? '1 img' : `${count} imgs`;
+
+  const actions = document.createElement('div');
+  actions.className = 'tm-row-actions';
+
+  const editBtn = document.createElement('button');
+  editBtn.className = 'tm-edit-btn';
+  editBtn.title = 'Editar descripción';
+  editBtn.textContent = '✎';
+
+  const delBtn = document.createElement('button');
+  delBtn.className = 'tm-del-btn';
+  delBtn.title = 'Eliminar tag';
+  delBtn.textContent = '×';
+
+  actions.append(editBtn, delBtn);
+  top.append(nameEl, countEl, actions);
+
+  const descView = document.createElement('div');
+  descView.className = 'tm-desc-view' + (desc ? ' has-content' : '');
+  descView.textContent = desc || 'Sin descripción';
+
+  const descEdit = document.createElement('div');
+  descEdit.className = 'tm-desc-edit';
+  descEdit.style.display = 'none';
+
+  const ta = document.createElement('textarea');
+  ta.className = 'tm-desc-ta';
+  ta.value = desc;
+  ta.placeholder = 'Descripción… las URLs se convierten en links automáticamente.';
+
+  const editActions = document.createElement('div');
+  editActions.className = 'tm-edit-actions';
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.className = 'te-cancel';
+
+  const saveBtn = document.createElement('button');
+  saveBtn.textContent = 'Save';
+  saveBtn.className = 'te-save';
+
+  editActions.append(cancelBtn, saveBtn);
+  descEdit.append(ta, editActions);
+  row.append(top, descView, descEdit);
+
+  editBtn.addEventListener('click', () => {
+    descView.style.display = 'none';
+    descEdit.style.display = 'block';
+    ta.focus();
+  });
+
+  cancelBtn.addEventListener('click', () => {
+    descView.style.display = '';
+    descEdit.style.display = 'none';
+    ta.value = tagDescMap[tag] || '';
+  });
+
+  saveBtn.addEventListener('click', async () => {
+    const val = ta.value.trim();
+    const { error } = await supabase.from('tag_meta').upsert({ tag, description: val });
+    if (!error) {
+      tagDescMap[tag] = val;
+      descView.textContent = val || 'Sin descripción';
+      descView.classList.toggle('has-content', !!val);
+      descView.style.display = '';
+      descEdit.style.display = 'none';
+      if (currentFilter === tag) showDescPanel(tag);
+    }
+  });
+
+  delBtn.addEventListener('click', async () => {
+    if (!confirm(`¿Eliminar el tag "${tag}"? Se quitará de todas las imágenes.`)) return;
+
+    const affected = Object.entries(metaMap).filter(([, tags]) => tags.includes(tag));
+
+    await Promise.all([
+      ...affected.map(([filename, tags]) =>
+        supabase.from('image_meta').update({ tags: tags.filter(t => t !== tag) }).eq('filename', filename)
+      ),
+      supabase.from('tag_meta').delete().eq('tag', tag)
+    ]);
+
+    for (const [filename] of affected) {
+      metaMap[filename] = metaMap[filename].filter(t => t !== tag);
+    }
+    delete tagDescMap[tag];
+    row.remove();
+    if (!tmList.children.length) tmList.innerHTML = '<p class="tm-empty">No hay tags todavía.</p>';
+
+    buildFilterBar();
+    if (currentFilter === tag) {
+      currentFilter = null;
+      showDescPanel(null);
+      thumbRegistry.forEach(({ el }) => { el.style.display = ''; });
+    }
+  });
+
+  return row;
+}
+
+async function addNewTag() {
+  const name = tmNewName.value.trim().toLowerCase();
+  if (!name) return;
+  if (getAllTags().includes(name)) { tmNewName.value = ''; return; }
+
+  const { error } = await supabase.from('tag_meta').upsert({ tag: name, description: '' });
+  if (!error) {
+    tagDescMap[name] = '';
+    tmNewName.value = '';
+    renderTagsManager();
+    buildFilterBar();
+  }
+}
+
+document.getElementById('tags-manager-btn').addEventListener('click', () => {
+  renderTagsManager();
+  tagsMgr.showModal();
+});
+document.getElementById('tm-close').addEventListener('click', () => tagsMgr.close());
+tagsMgr.addEventListener('click', e => { if (e.target === tagsMgr) tagsMgr.close(); });
+document.getElementById('tm-new-add').addEventListener('click', addNewTag);
+tmNewName.addEventListener('keydown', e => { if (e.key === 'Enter') addNewTag(); });
+
+load();
+</script>
+</body>
+</html>
