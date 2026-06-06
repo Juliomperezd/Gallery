@@ -22,8 +22,9 @@ Galería compartida de imágenes y vídeos de referencia para 4 personas (con PI
 ## Supabase — proyecto "Julio Gallery"
 - URL: `https://kqupemycgbpzzkzrsxtw.supabase.co`
 - Bucket: `images` (público)
-- Tabla: `image_meta` (filename TEXT PK, tags TEXT[], notes TEXT)
+- Tabla: `image_meta` (filename TEXT PK, tags TEXT[], notes TEXT, flow_id TEXT)
 - Tabla: `tag_meta` (tag TEXT PK, description TEXT)
+- Tabla: `flows` (id TEXT PK, name TEXT, created_at TIMESTAMPTZ)
 
 ### SQL ejecutado
 ```sql
@@ -38,11 +39,24 @@ CREATE TABLE image_meta (
   tags TEXT[] DEFAULT '{}'
 );
 ALTER TABLE image_meta ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT '';
+ALTER TABLE image_meta ADD COLUMN IF NOT EXISTS flow_id TEXT;
 ALTER TABLE image_meta ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "public read"   ON image_meta FOR SELECT USING (true);
 CREATE POLICY "public insert" ON image_meta FOR INSERT WITH CHECK (true);
 CREATE POLICY "public update" ON image_meta FOR UPDATE USING (true);
 CREATE POLICY "public delete" ON image_meta FOR DELETE USING (true);
+
+-- flows table
+CREATE TABLE IF NOT EXISTS flows (
+  id TEXT PRIMARY KEY,
+  name TEXT DEFAULT '',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE flows ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "public read"   ON flows FOR SELECT USING (true);
+CREATE POLICY "public insert" ON flows FOR INSERT WITH CHECK (true);
+CREATE POLICY "public update" ON flows FOR UPDATE USING (true);
+CREATE POLICY "public delete" ON flows FOR DELETE USING (true);
 ```
 
 ## Features implementadas
@@ -59,6 +73,7 @@ CREATE POLICY "public delete" ON image_meta FOR DELETE USING (true);
 - [x] Drag & drop en index.html → redirige a upload.html con archivos precargados (via IndexedDB)
 - [x] Drag & drop en upload.html → sube automáticamente sin pulsar botón
 - [x] Tags Manager: crear/renombrar/borrar tags con descripciones y recuento de imágenes
+- [x] Flows: batch de imágenes agrupadas en 1 celda con badge de conteo. Click abre lightbox horizontal con scroll snap, flechas ← →, tags por slide, edit tags y delete por slide
 - [x] PIN de acceso (auth.js)
 - [x] Desplegado en GitHub Pages
 

@@ -210,6 +210,32 @@
   }
   #gallery-link:hover { color: #ccc; }
   #global-status { margin-top: 20px; font-size: 12px; color: #555; letter-spacing: 0.04em; min-height: 16px; }
+
+  /* Flow section */
+  #flow-section { margin-top: 16px; display: none; }
+  #flow-toggle-row { display: flex; align-items: center; gap: 10px; }
+  #flow-toggle {
+    display: flex; align-items: center; gap: 8px;
+    background: none; border: 1px solid #2a2a2a; border-radius: 4px;
+    color: #666; font-size: 12px; padding: 7px 14px; cursor: pointer;
+    font-family: inherit; letter-spacing: 0.04em; transition: border-color 0.15s, color 0.15s;
+    white-space: nowrap;
+  }
+  #flow-toggle:hover { border-color: #444; color: #ccc; }
+  #flow-toggle.on { border-color: #aaa; color: #fff; }
+  #flow-toggle .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: #333; transition: background 0.15s; flex-shrink: 0;
+  }
+  #flow-toggle.on .dot { background: #fff; }
+  #flow-name-input {
+    flex: 1; display: none; background: #111; border: 1px solid #1e1e1e;
+    border-radius: 4px; color: #ccc; font-size: 13px; padding: 7px 11px;
+    outline: none; font-family: inherit;
+  }
+  #flow-name-input.visible { display: block; }
+  #flow-name-input:focus { border-color: #555; }
+  #flow-name-input::placeholder { color: #444; }
 </style>
 </head>
 <body>
@@ -234,6 +260,13 @@
     <div id="upload-chips" class="tags-chips"></div>
     <div class="tags-input-row">
       <input id="upload-tag-input" type="text" placeholder="Type a new tag and press Enter or comma…">
+    </div>
+  </div>
+
+  <div id="flow-section">
+    <div id="flow-toggle-row">
+      <button id="flow-toggle"><span class="dot"></span>Group as Flow</button>
+      <input id="flow-name-input" type="text" placeholder="Flow name (optional)">
     </div>
   </div>
 
@@ -266,6 +299,17 @@ const globalSt        = document.getElementById('global-status');
 
 let queue      = [];
 let uploadTags = [];
+let flowMode   = false;
+
+const flowSection   = document.getElementById('flow-section');
+const flowToggle    = document.getElementById('flow-toggle');
+const flowNameInput = document.getElementById('flow-name-input');
+
+flowToggle.addEventListener('click', () => {
+  flowMode = !flowMode;
+  flowToggle.classList.toggle('on', flowMode);
+  flowNameInput.classList.toggle('visible', flowMode);
+});
 
 // ── Existing tag suggestions ─────────────────────────────────────────────────
 
@@ -425,6 +469,7 @@ function addFiles(files) {
   if (queue.length > 0) {
     actions.style.display = 'flex';
     tagsSection.style.display = 'block';
+    flowSection.style.display = 'block';
   }
 }
 
@@ -434,7 +479,6 @@ dropZone.addEventListener('drop', e => {
   e.preventDefault();
   dropZone.classList.remove('over');
   addFiles(e.dataTransfer.files);
-  setTimeout(() => uploadBtn.click(), 80);
 });
 fileInput.addEventListener('change', () => { addFiles(fileInput.files); fileInput.value = ''; });
 
@@ -446,6 +490,17 @@ uploadBtn.addEventListener('click', async () => {
 
   uploadBtn.disabled = true;
   globalSt.textContent = `Uploading ${pending.length} file${pending.length > 1 ? 's' : ''}…`;
+
+  let flowId = null;
+  if (flowMode && pending.length > 0) {
+    flowId = 'flow_' + Date.now();
+    const { error: flowErr } = await supabase.from('flows').upsert({ id: flowId, name: flowNameInput.value.trim() });
+    if (flowErr) {
+      globalSt.textContent = 'Error creating flow: ' + flowErr.message;
+      uploadBtn.disabled = false;
+      return;
+    }
+  }
 
   let done = 0;
   for (const item of pending) {
@@ -464,8 +519,11 @@ uploadBtn.addEventListener('click', async () => {
       item.stateEl.textContent = 'Error';
       item.stateEl.classList.add('err');
     } else {
-      if (uploadTags.length > 0) {
-        await supabase.from('image_meta').upsert({ filename: targetName, tags: uploadTags });
+      if (uploadTags.length > 0 || flowId) {
+        const meta = { filename: targetName, tags: uploadTags };
+        if (flowId) meta.flow_id = flowId;
+        const { error: metaErr } = await supabase.from('image_meta').upsert(meta);
+        if (metaErr) console.error('Meta upsert failed:', metaErr.message);
       }
       item.stateEl.textContent = 'Done ✓';
       item.stateEl.classList.add('ok');
