@@ -201,6 +201,9 @@
   .te-chip { display: flex; align-items: center; gap: 4px; padding: 4px 10px; background: #222; border-radius: 20px; font-size: 12px; color: #ddd; }
   .te-chip-rm { background: none; border: none; color: #666; cursor: pointer; font-size: 15px; line-height: 1; padding: 0 0 0 2px; }
   .te-chip-rm:hover { color: #fff; }
+  .te-chip-edit { background: none; border: none; color: #3a3a3a; cursor: pointer; font-size: 12px; line-height: 1; padding: 0 3px; transition: color 0.12s; }
+  .te-chip-edit:hover { color: #999; }
+  .te-chip-input { background: transparent; border: none; border-bottom: 1px solid #555; color: #ddd; font-size: 12px; outline: none; font-family: inherit; min-width: 60px; max-width: 140px; padding: 0 2px; }
   .te-input-row { display: flex; gap: 8px; margin-bottom: 18px; }
   .te-input-row input {
     flex: 1; background: #111; border: 1px solid #252525; border-radius: 6px;
@@ -963,8 +966,19 @@ function renderEditorChips() {
   for (const tag of editTags) {
     const chip = document.createElement('div');
     chip.className = 'te-chip';
+
     const lbl = document.createElement('span');
     lbl.textContent = tag;
+
+    const editBtn = document.createElement('button');
+    editBtn.className = 'te-chip-edit';
+    editBtn.textContent = '✎';
+    editBtn.title = 'Renombrar tag (global)';
+    editBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      startChipRename(chip, lbl, tag);
+    });
+
     const rm = document.createElement('button');
     rm.className = 'te-chip-rm';
     rm.textContent = '×';
@@ -973,9 +987,67 @@ function renderEditorChips() {
       renderEditorChips();
       syncSuggestionStates();
     });
-    chip.append(lbl, rm);
+
+    chip.append(lbl, editBtn, rm);
     teChips.appendChild(chip);
   }
+}
+
+function startChipRename(chip, lbl, oldTag) {
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = oldTag;
+  input.className = 'te-chip-input';
+  input.style.width = Math.max(60, oldTag.length * 8) + 'px';
+  lbl.replaceWith(input);
+  input.focus();
+  input.select();
+
+  let confirmed = false;
+  const confirm = async () => {
+    if (confirmed) return;
+    confirmed = true;
+    const newTag = input.value.trim().toLowerCase();
+    if (!newTag || newTag === oldTag) { input.replaceWith(lbl); return; }
+    await renameTagGlobally(oldTag, newTag);
+    editTags = editTags.map(t => t === oldTag ? newTag : t);
+    renderEditorChips();
+    renderEditorSuggestions();
+  };
+
+  input.addEventListener('blur', confirm);
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); confirm(); }
+    if (e.key === 'Escape') { e.preventDefault(); confirmed = true; input.replaceWith(lbl); }
+  });
+}
+
+async function renameTagGlobally(oldTag, newTag) {
+  const affected = Object.entries(metaMap).filter(([, tags]) => tags.includes(oldTag));
+
+  await Promise.all(
+    affected.map(([filename, tags]) =>
+      supabase.from('image_meta').update({ tags: tags.map(t => t === oldTag ? newTag : t) }).eq('filename', filename)
+    )
+  );
+
+  if (oldTag in tagDescMap) {
+    await Promise.all([
+      supabase.from('tag_meta').delete().eq('tag', oldTag),
+      supabase.from('tag_meta').upsert({ tag: newTag, description: tagDescMap[oldTag] })
+    ]);
+    tagDescMap[newTag] = tagDescMap[oldTag];
+    delete tagDescMap[oldTag];
+  }
+
+  for (const [filename] of affected) {
+    metaMap[filename] = metaMap[filename].map(t => t === oldTag ? newTag : t);
+  }
+
+  if (currentFilter === oldTag) currentFilter = newTag;
+  else if (currentFilter?.startsWith(oldTag + '/')) currentFilter = newTag + currentFilter.slice(oldTag.length);
+
+  buildFilterBar();
 }
 
 function commitTag() {
