@@ -278,9 +278,33 @@
   }
   .tm-desc-ta:focus { border-color: #333; }
   .tm-edit-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+
+  /* Drop overlay */
+  #drop-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    background: rgba(13,13,13,0.88);
+    backdrop-filter: blur(6px);
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 10px;
+    border: 2px dashed #333;
+    pointer-events: none;
+  }
+  #drop-overlay.active { display: flex; pointer-events: auto; }
+  #drop-overlay p { font-size: 20px; color: #ddd; letter-spacing: 0.1em; text-transform: uppercase; }
+  #drop-overlay span { font-size: 12px; color: #555; letter-spacing: 0.06em; }
 </style>
 </head>
 <body>
+
+<div id="drop-overlay">
+  <p>Drop to upload</p>
+  <span>te llevará a la página de subida</span>
+</div>
 
 <header>
   <h1>Refs</h1>
@@ -778,6 +802,42 @@ document.getElementById('tm-new-add').addEventListener('click', addNewTag);
 tmNewName.addEventListener('keydown', e => { if (e.key === 'Enter') addNewTag(); });
 
 load();
+
+// ── Global drag-to-upload ─────────────────────────────────────────────────────
+
+function openIDB() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open('refs-pending', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('files');
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+
+const dropOverlay = document.getElementById('drop-overlay');
+
+document.addEventListener('dragenter', e => {
+  if ([...e.dataTransfer.items].some(i => i.kind === 'file'))
+    dropOverlay.classList.add('active');
+});
+document.addEventListener('dragleave', e => {
+  if (!document.documentElement.contains(e.relatedTarget))
+    dropOverlay.classList.remove('active');
+});
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', async e => {
+  e.preventDefault();
+  dropOverlay.classList.remove('active');
+  const files = [...e.dataTransfer.files].filter(f => /^image\//i.test(f.type));
+  if (!files.length) return;
+  const db = await openIDB();
+  const tx = db.transaction('files', 'readwrite');
+  const store = tx.objectStore('files');
+  store.clear();
+  files.forEach(f => store.put(f, f.name));
+  await new Promise(r => { tx.oncomplete = r; });
+  location.href = 'upload.html';
+});
 </script>
 </body>
 </html>

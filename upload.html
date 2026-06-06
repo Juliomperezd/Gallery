@@ -337,6 +337,27 @@ uploadTagInput.addEventListener('keydown', e => {
 
 loadTagSuggestions();
 
+// ── Load files passed from index via IndexedDB ────────────────────────────────
+
+(async () => {
+  try {
+    const db = await new Promise((res, rej) => {
+      const r = indexedDB.open('refs-pending', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('files');
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    });
+    const files = await new Promise((res, rej) => {
+      const req = db.transaction('files', 'readonly').objectStore('files').getAll();
+      req.onsuccess = () => res(req.result);
+      req.onerror = () => rej(req.error);
+    });
+    if (!files.length) return;
+    db.transaction('files', 'readwrite').objectStore('files').clear();
+    addFiles(files);
+  } catch(e) { /* IDB unavailable */ }
+})();
+
 // ── File queue ───────────────────────────────────────────────────────────────
 
 function formatBytes(b) {
@@ -399,7 +420,12 @@ function addFiles(files) {
 
 dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('over'); });
 dropZone.addEventListener('dragleave', () => dropZone.classList.remove('over'));
-dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('over'); addFiles(e.dataTransfer.files); });
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('over');
+  addFiles(e.dataTransfer.files);
+  setTimeout(() => uploadBtn.click(), 80);
+});
 fileInput.addEventListener('change', () => { addFiles(fileInput.files); fileInput.value = ''; });
 
 // ── Upload ───────────────────────────────────────────────────────────────────
