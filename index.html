@@ -478,19 +478,25 @@
     max-width: 100vw; max-height: 100vh; width: 100vw; height: 100vh; outline: none;
   }
   #flow-lb::backdrop { background: rgba(0,0,0,0.95); }
-  #flow-lb-wrap { display: flex; flex-direction: column; width: 100vw; height: 100vh; position: relative; }
-  #flow-track {
-    display: flex; flex: 1; overflow-x: scroll;
-    scroll-snap-type: x mandatory; scrollbar-width: none; align-items: center;
+  #flow-lb-wrap {
+    display: flex; flex-direction: column; width: 100vw; height: 100vh;
+    position: relative; align-items: center; justify-content: center;
   }
-  #flow-track::-webkit-scrollbar { display: none; }
+  #flow-track {
+    display: flex; gap: 24px;
+    overflow-x: auto; overflow-y: hidden;
+    padding: 24px 60px; align-items: flex-start;
+    max-width: 100vw; width: 100%;
+    scrollbar-width: thin; scrollbar-color: #444 transparent;
+  }
+  #flow-track::-webkit-scrollbar { height: 4px; }
+  #flow-track::-webkit-scrollbar-thumb { background: #444; border-radius: 2px; }
   .flow-slide {
-    min-width: 100%; scroll-snap-align: center;
-    display: flex; align-items: center; justify-content: center; padding: 0 48px;
+    flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 10px;
   }
   .flow-slide img, .flow-slide video {
-    max-width: 100%; max-height: 76vh; object-fit: contain; border-radius: 2px;
-    box-shadow: 0 0 50px rgba(0,0,0,0.7);
+    max-height: 68vh; max-width: 72vw; object-fit: contain; border-radius: 2px;
+    box-shadow: 0 0 40px rgba(0,0,0,0.6); display: block;
   }
   #flow-lb-close {
     position: absolute; top: 20px; right: 24px;
@@ -498,30 +504,18 @@
     cursor: pointer; line-height: 1; z-index: 10; transition: color 0.15s;
   }
   #flow-lb-close:hover { color: #fff; }
-  #flow-lb-bottom {
-    padding: 12px 24px 20px; display: flex; flex-direction: column;
-    align-items: center; gap: 8px; flex-shrink: 0;
-  }
-  #flow-lb-nav { display: flex; align-items: center; gap: 14px; }
-  .flow-nav-btn {
+  .flow-slide-footer { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .flow-slide-tags { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; max-width: 360px; }
+  .flow-slide-actions { display: flex; gap: 6px; }
+  .flow-slide-edit-btn, .flow-slide-del-btn {
     background: none; border: 1px solid #3a3a3a; border-radius: 4px;
-    color: #888; font-size: 14px; padding: 5px 18px; cursor: pointer;
-    transition: color 0.15s, border-color 0.15s; font-family: inherit; line-height: 1.5;
-  }
-  .flow-nav-btn:hover:not(:disabled) { color: #fff; border-color: #777; }
-  .flow-nav-btn:disabled { opacity: 0.25; cursor: default; }
-  #flow-lb-counter { font-size: 11px; color: #777; letter-spacing: 0.08em; min-width: 44px; text-align: center; }
-  #flow-lb-tags { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; max-width: 600px; }
-  #flow-lb-foot-actions { display: flex; gap: 8px; }
-  #flow-edit-btn, #flow-delete-btn {
-    background: none; border: 1px solid #2a2a2a; border-radius: 4px;
-    font-size: 11px; padding: 5px 14px; cursor: pointer;
+    font-size: 11px; padding: 4px 12px; cursor: pointer;
     font-family: inherit; letter-spacing: 0.05em; transition: color 0.15s, border-color 0.15s;
   }
-  #flow-edit-btn { color: #bbb; border-color: #555; }
-  #flow-edit-btn:hover { color: #fff; border-color: #aaa; }
-  #flow-delete-btn { color: #c04040; border-color: #5a2a2a; }
-  #flow-delete-btn:hover { color: #ff6666; border-color: #a04040; }
+  .flow-slide-edit-btn { color: #bbb; }
+  .flow-slide-edit-btn:hover { color: #fff; border-color: #777; }
+  .flow-slide-del-btn { color: #c04040; border-color: #5a2a2a; }
+  .flow-slide-del-btn:hover { color: #ff6666; border-color: #a04040; }
 </style>
 </head>
 <body>
@@ -638,18 +632,6 @@
   <div id="flow-lb-wrap">
     <button id="flow-lb-close">×</button>
     <div id="flow-track"></div>
-    <div id="flow-lb-bottom">
-      <div id="flow-lb-nav">
-        <button class="flow-nav-btn" id="flow-prev">←</button>
-        <span id="flow-lb-counter"></span>
-        <button class="flow-nav-btn" id="flow-next">→</button>
-      </div>
-      <div id="flow-lb-tags"></div>
-      <div id="flow-lb-foot-actions">
-        <button id="flow-edit-btn">✏ Edit tags</button>
-        <button id="flow-delete-btn">Delete</button>
-      </div>
-    </div>
   </div>
 </dialog>
 
@@ -798,7 +780,7 @@ function buildFlowCard(flowId, files, name) {
   badge.textContent = files.length;
 
   card.append(media, badge);
-  card.addEventListener('click', () => openFlowLightbox(flowId, files, name));
+  card.addEventListener('click', () => openFlowLightbox(flowId, files));
   return card;
 }
 
@@ -1200,11 +1182,14 @@ document.getElementById('te-add').addEventListener('click', commitTag);
 teInput.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); commitTag(); } });
 document.getElementById('te-cancel').addEventListener('click', () => tagDlg.close());
 
+let onTagSaveCallback = null;
+
 document.getElementById('te-save').addEventListener('click', async () => {
   const { error } = await supabase.from('image_meta').upsert({ filename: lbFilename, tags: editTags });
   if (!error) {
     metaMap[lbFilename] = editTags;
     renderLbTags(editTags);
+    if (onTagSaveCallback) { onTagSaveCallback(); onTagSaveCallback = null; }
     buildFilterBar();
     tagDlg.close();
   }
@@ -1212,162 +1197,122 @@ document.getElementById('te-save').addEventListener('click', async () => {
 
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { lb.close(); tagDlg.close(); flowLb.close(); }
-  if (flowLb.open) {
-    if (e.key === 'ArrowLeft')  goToSlide(currentFlowIdx - 1);
-    if (e.key === 'ArrowRight') goToSlide(currentFlowIdx + 1);
-  }
 });
 
 // ── Flow lightbox ─────────────────────────────────────────────────────────────
 
-const flowLb      = document.getElementById('flow-lb');
-const flowTrack   = document.getElementById('flow-track');
-const flowCounter = document.getElementById('flow-lb-counter');
-const flowPrevBtn = document.getElementById('flow-prev');
-const flowNextBtn = document.getElementById('flow-next');
-const flowLbTags  = document.getElementById('flow-lb-tags');
+const flowLb    = document.getElementById('flow-lb');
+const flowTrack = document.getElementById('flow-track');
 
 let currentFlowFiles = [];
-let currentFlowIdx   = 0;
 let currentFlowId    = null;
 
-function openFlowLightbox(flowId, files, name) {
-  currentFlowId    = flowId;
-  currentFlowFiles = files;
-  currentFlowIdx   = 0;
+function buildFlowSlide(file) {
+  const { data: { publicUrl } } = supabase.storage.from(BUCKET).getPublicUrl(file.name);
+  const slide = document.createElement('div');
+  slide.className = 'flow-slide';
 
-  flowTrack.innerHTML = '';
-  for (const file of files) {
-    const { data: { publicUrl } } = supabase.storage.from(BUCKET).getPublicUrl(file.name);
-    const slide = document.createElement('div');
-    slide.className = 'flow-slide';
-    let media;
-    if (isVideo(file.name)) {
-      media = document.createElement('video');
-      media.src = publicUrl; media.controls = true; media.playsInline = true;
-    } else {
-      media = document.createElement('img');
-      media.src = publicUrl; media.loading = 'lazy';
-    }
-    slide.appendChild(media);
-    flowTrack.appendChild(slide);
+  let media;
+  if (isVideo(file.name)) {
+    media = document.createElement('video');
+    media.src = publicUrl; media.controls = true; media.playsInline = true;
+  } else {
+    media = document.createElement('img');
+    media.src = publicUrl; media.loading = 'lazy';
   }
 
-  updateFlowMeta();
+  const footer = document.createElement('div');
+  footer.className = 'flow-slide-footer';
+
+  const tagsEl = document.createElement('div');
+  tagsEl.className = 'flow-slide-tags';
+  const renderSlideTags = () => {
+    tagsEl.innerHTML = '';
+    for (const tag of (metaMap[file.name] || [])) {
+      const chip = document.createElement('span');
+      chip.className = 'lb-tag'; chip.textContent = tag;
+      chip.addEventListener('click', () => { flowLb.close(); filterByTag(tag); });
+      tagsEl.appendChild(chip);
+    }
+  };
+  renderSlideTags();
+
+  const actions = document.createElement('div');
+  actions.className = 'flow-slide-actions';
+
+  const editBtn = document.createElement('button');
+  editBtn.className = 'flow-slide-edit-btn'; editBtn.textContent = '✏ Edit tags';
+  editBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    lbFilename = file.name;
+    onTagSaveCallback = () => renderSlideTags();
+    openEditor(file.name);
+  });
+
+  const delBtn = document.createElement('button');
+  delBtn.className = 'flow-slide-del-btn'; delBtn.textContent = 'Delete';
+  delBtn.addEventListener('click', async e => {
+    e.stopPropagation();
+    if (!confirm(`Delete "${file.name}"?`)) return;
+    const filename = file.name;
+
+    await Promise.all([
+      supabase.storage.from(BUCKET).remove([filename]),
+      supabase.from('image_meta').delete().eq('filename', filename)
+    ]);
+
+    delete metaMap[filename]; delete notesMap[filename]; delete fileFlowMap[filename];
+    const wasCover = currentFlowFiles[0]?.name === filename;
+    currentFlowFiles = currentFlowFiles.filter(f => f.name !== filename);
+    slide.remove();
+
+    const regIdx = thumbRegistry.findIndex(t => t.flowId === currentFlowId);
+    if (currentFlowFiles.length === 0) {
+      if (regIdx > -1) { thumbRegistry[regIdx].el.remove(); thumbRegistry.splice(regIdx, 1); }
+      flowLb.close(); buildFilterBar(); return;
+    }
+    if (regIdx > -1) {
+      thumbRegistry[regIdx].flowFilenames = currentFlowFiles.map(f => f.name);
+      const badge = thumbRegistry[regIdx].el.querySelector('.flow-badge');
+      if (badge) badge.textContent = currentFlowFiles.length;
+      if (wasCover) {
+        const newFirst = currentFlowFiles[0];
+        const { data: { publicUrl: pu } } = supabase.storage.from(BUCKET).getPublicUrl(newFirst.name);
+        const card = thumbRegistry[regIdx].el;
+        const old = card.querySelector('img, video');
+        if (isVideo(newFirst.name)) {
+          const v = document.createElement('video');
+          v.src = pu; v.autoplay = true; v.muted = true; v.loop = true; v.playsInline = true; v.preload = 'metadata';
+          old?.replaceWith(v);
+        } else {
+          const img = document.createElement('img');
+          img.loading = 'lazy'; img.src = pu;
+          img.onload = () => img.classList.add('loaded');
+          old?.replaceWith(img);
+        }
+      }
+    }
+    buildFilterBar();
+  });
+
+  actions.append(editBtn, delBtn);
+  footer.append(tagsEl, actions);
+  slide.append(media, footer);
+  return slide;
+}
+
+function openFlowLightbox(flowId, files) {
+  currentFlowId    = flowId;
+  currentFlowFiles = [...files];
+  flowTrack.innerHTML = '';
+  for (const file of files) flowTrack.appendChild(buildFlowSlide(file));
   flowLb.showModal();
   flowTrack.scrollLeft = 0;
 }
 
-function updateFlowMeta() {
-  const total = currentFlowFiles.length;
-  flowCounter.textContent = `${currentFlowIdx + 1} / ${total}`;
-  flowPrevBtn.disabled = currentFlowIdx === 0;
-  flowNextBtn.disabled = currentFlowIdx === total - 1;
-
-  const filename = currentFlowFiles[currentFlowIdx]?.name;
-  flowLbTags.innerHTML = '';
-  if (!filename) return;
-  for (const tag of (metaMap[filename] || [])) {
-    const chip = document.createElement('span');
-    chip.className = 'lb-tag';
-    chip.textContent = tag;
-    chip.addEventListener('click', () => { flowLb.close(); filterByTag(tag); });
-    flowLbTags.appendChild(chip);
-  }
-}
-
-function goToSlide(idx) {
-  if (idx < 0 || idx >= currentFlowFiles.length) return;
-  currentFlowIdx = idx;
-  updateFlowMeta();
-  flowTrack.scrollTo({ left: idx * flowTrack.clientWidth, behavior: 'smooth' });
-}
-
-flowPrevBtn.addEventListener('click', () => goToSlide(currentFlowIdx - 1));
-flowNextBtn.addEventListener('click', () => goToSlide(currentFlowIdx + 1));
-
 document.getElementById('flow-lb-close').addEventListener('click', () => flowLb.close());
 flowLb.addEventListener('click', e => { if (e.target === flowLb) flowLb.close(); });
-flowLb.addEventListener('close', () => {
-  flowTrack.querySelectorAll('video').forEach(v => v.pause());
-});
-
-document.getElementById('flow-edit-btn').addEventListener('click', e => {
-  e.stopPropagation();
-  const filename = currentFlowFiles[currentFlowIdx]?.name;
-  if (filename) { lbFilename = filename; openEditor(filename); }
-});
-
-document.getElementById('flow-delete-btn').addEventListener('click', async e => {
-  e.stopPropagation();
-  const file = currentFlowFiles[currentFlowIdx];
-  if (!file || !confirm(`Delete "${file.name}"?`)) return;
-  const filename = file.name;
-
-  await Promise.all([
-    supabase.storage.from(BUCKET).remove([filename]),
-    supabase.from('image_meta').delete().eq('filename', filename)
-  ]);
-
-  delete metaMap[filename];
-  delete notesMap[filename];
-  delete fileFlowMap[filename];
-
-  const wasCover = currentFlowIdx === 0;
-  currentFlowFiles = currentFlowFiles.filter(f => f.name !== filename);
-
-  const regIdx = thumbRegistry.findIndex(t => t.flowId === currentFlowId);
-  if (currentFlowFiles.length === 0) {
-    if (regIdx > -1) { thumbRegistry[regIdx].el.remove(); thumbRegistry.splice(regIdx, 1); }
-    flowLb.close();
-    buildFilterBar();
-    return;
-  }
-
-  if (regIdx > -1) {
-    thumbRegistry[regIdx].flowFilenames = currentFlowFiles.map(f => f.name);
-    const badge = thumbRegistry[regIdx].el.querySelector('.flow-badge');
-    if (badge) badge.textContent = currentFlowFiles.length;
-    if (wasCover) {
-      const newFirst = currentFlowFiles[0];
-      const { data: { publicUrl } } = supabase.storage.from(BUCKET).getPublicUrl(newFirst.name);
-      const card = thumbRegistry[regIdx].el;
-      const old = card.querySelector('img, video');
-      if (isVideo(newFirst.name)) {
-        const v = document.createElement('video');
-        v.src = publicUrl; v.autoplay = true; v.muted = true; v.loop = true; v.playsInline = true; v.preload = 'metadata';
-        old?.replaceWith(v);
-      } else {
-        const img = document.createElement('img');
-        img.loading = 'lazy'; img.src = publicUrl;
-        img.onload = () => img.classList.add('loaded');
-        old?.replaceWith(img);
-      }
-    }
-  }
-
-  if (currentFlowIdx >= currentFlowFiles.length) currentFlowIdx = currentFlowFiles.length - 1;
-
-  flowTrack.innerHTML = '';
-  for (const f of currentFlowFiles) {
-    const { data: { publicUrl: pu } } = supabase.storage.from(BUCKET).getPublicUrl(f.name);
-    const slide = document.createElement('div');
-    slide.className = 'flow-slide';
-    let media;
-    if (isVideo(f.name)) {
-      media = document.createElement('video');
-      media.src = pu; media.controls = true; media.playsInline = true;
-    } else {
-      media = document.createElement('img');
-      media.src = pu; media.loading = 'lazy';
-    }
-    slide.appendChild(media);
-    flowTrack.appendChild(slide);
-  }
-  updateFlowMeta();
-  flowTrack.scrollLeft = currentFlowIdx * flowTrack.clientWidth;
-  buildFilterBar();
-});
+flowLb.addEventListener('close', () => { flowTrack.querySelectorAll('video').forEach(v => v.pause()); });
 
 // ── Tags Manager ──────────────────────────────────────────────────────────────
 
