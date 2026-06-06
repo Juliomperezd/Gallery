@@ -128,15 +128,39 @@
     font-size: 11px; padding: 5px 14px; cursor: pointer;
     font-family: inherit; letter-spacing: 0.05em; transition: color 0.15s, border-color 0.15s;
   }
-  #lb-edit-btn { color: #444; }
-  #lb-edit-btn:hover { color: #ccc; border-color: #555; }
-  #lb-delete-btn { color: #6a2a2a; border-color: #2a1a1a; }
-  #lb-delete-btn:hover { color: #e05555; border-color: #6a2a2a; }
+  #lb-edit-btn { color: #bbb; border-color: #555; }
+  #lb-edit-btn:hover { color: #fff; border-color: #aaa; }
+  #lb-delete-btn { color: #c04040; border-color: #5a2a2a; }
+  #lb-delete-btn:hover { color: #ff6666; border-color: #a04040; }
+
+  /* Notes */
+  #lb-notes-wrap { max-width: 520px; width: 100%; text-align: center; }
+  .lb-notes-text {
+    font-size: 13px; color: #999; line-height: 1.65; letter-spacing: 0.02em;
+    white-space: pre-wrap; word-break: break-word; cursor: pointer;
+    transition: color 0.15s;
+  }
+  .lb-notes-text:hover { color: #ddd; }
+  .lb-notes-empty {
+    background: none; border: none; font-size: 11px; color: #3a3a3a;
+    letter-spacing: 0.07em; cursor: pointer; font-family: inherit;
+    transition: color 0.15s; text-transform: uppercase;
+  }
+  .lb-notes-empty:hover { color: #777; }
+  #lb-notes-textarea {
+    width: 100%; background: #161616; border: 1px solid #333; border-radius: 8px;
+    color: #ccc; font-size: 13px; padding: 10px 12px; outline: none;
+    font-family: inherit; resize: vertical; min-height: 72px; line-height: 1.6;
+  }
+  #lb-notes-textarea:focus { border-color: #555; }
+  #lb-notes-textarea::placeholder { color: #444; }
+  .lb-notes-row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
 
   /* Tag editor */
   #tag-editor {
     background: #161616; border: 1px solid #2a2a2a; border-radius: 10px;
     padding: 22px; width: 360px; max-width: 92vw;
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); margin: 0;
   }
   #tag-editor::backdrop { background: rgba(0,0,0,0.75); }
   #tag-editor h3 { font-size: 11px; font-weight: 500; color: #aaa; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 16px; }
@@ -341,6 +365,7 @@
     <div id="lb-footer">
       <span id="lb-name"></span>
       <div id="lb-tags"></div>
+      <div id="lb-notes-wrap"></div>
       <div id="lb-footer-actions">
         <button id="lb-edit-btn">✏ Edit tags</button>
         <button id="lb-delete-btn">Delete</button>
@@ -400,13 +425,15 @@ const lbImg     = document.getElementById('lb-img');
 const lbVideo   = document.getElementById('lb-video');
 const lbName    = document.getElementById('lb-name');
 const lbTags    = document.getElementById('lb-tags');
-const lbEditBtn = document.getElementById('lb-edit-btn');
+const lbEditBtn    = document.getElementById('lb-edit-btn');
+const lbNotesWrap  = document.getElementById('lb-notes-wrap');
 const tagDlg       = document.getElementById('tag-editor');
 const teChips      = document.getElementById('te-chips');
 const teSuggestions = document.getElementById('te-suggestions');
 const teInput      = document.getElementById('te-input');
 
 let metaMap       = {};
+let notesMap      = {};
 let tagDescMap    = {};
 let thumbRegistry = [];
 let currentFilter = null;
@@ -418,14 +445,15 @@ let editTags      = [];
 async function load() {
   const [storageRes, metaRes, tagDescRes] = await Promise.all([
     supabase.storage.from(BUCKET).list('', { limit: 500, sortBy: { column: 'created_at', order: 'desc' } }),
-    supabase.from('image_meta').select('filename, tags'),
+    supabase.from('image_meta').select('filename, tags, notes'),
     supabase.from('tag_meta').select('tag, description')
   ]);
 
   if (storageRes.error) { status.textContent = 'Error: ' + storageRes.error.message; return; }
 
   for (const row of (metaRes.data || [])) {
-    metaMap[row.filename] = row.tags || [];
+    metaMap[row.filename]  = row.tags  || [];
+    notesMap[row.filename] = row.notes || '';
   }
 
   for (const row of (tagDescRes.data || [])) {
@@ -559,6 +587,7 @@ function openLightbox(url, filename) {
   lbFilename = filename;
   lbName.textContent = filename;
   renderLbTags(metaMap[filename] || []);
+  renderLbNotes(filename);
   if (isVideo(filename)) {
     lbImg.style.display = 'none';
     lbVideo.src = url;
@@ -571,6 +600,60 @@ function openLightbox(url, filename) {
     lbVideo.src = '';
   }
   lb.showModal();
+}
+
+function renderLbNotes(filename) {
+  lbNotesWrap.innerHTML = '';
+  const notes = notesMap[filename] || '';
+  if (notes) {
+    const p = document.createElement('p');
+    p.className = 'lb-notes-text';
+    p.textContent = notes;
+    p.addEventListener('click', () => showNotesEditor(filename));
+    lbNotesWrap.appendChild(p);
+  } else {
+    const btn = document.createElement('button');
+    btn.className = 'lb-notes-empty';
+    btn.textContent = '+ add note';
+    btn.addEventListener('click', () => showNotesEditor(filename));
+    lbNotesWrap.appendChild(btn);
+  }
+}
+
+function showNotesEditor(filename) {
+  lbNotesWrap.innerHTML = '';
+  const ta = document.createElement('textarea');
+  ta.id = 'lb-notes-textarea';
+  ta.value = notesMap[filename] || '';
+  ta.placeholder = 'Add a note…';
+
+  const row = document.createElement('div');
+  row.className = 'lb-notes-row';
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'te-cancel';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.addEventListener('click', () => renderLbNotes(filename));
+
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'te-save';
+  saveBtn.textContent = 'Save';
+  saveBtn.addEventListener('click', async () => {
+    const val = ta.value.trim();
+    const { error } = await supabase.from('image_meta').upsert({
+      filename,
+      tags: metaMap[filename] || [],
+      notes: val
+    });
+    if (!error) {
+      notesMap[filename] = val;
+      renderLbNotes(filename);
+    }
+  });
+
+  row.append(cancelBtn, saveBtn);
+  lbNotesWrap.append(ta, row);
+  ta.focus();
 }
 
 function renderLbTags(tags) {
