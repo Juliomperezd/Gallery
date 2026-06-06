@@ -301,7 +301,6 @@
   .te-chip-rm:hover { color: #fff; }
   .te-chip-edit { background: none; border: none; color: #666; cursor: pointer; font-size: 12px; line-height: 1; padding: 0 3px; transition: color 0.12s; }
   .te-chip-edit:hover { color: #ddd; }
-  .te-chip-input { background: transparent; border: none; border-bottom: 1px solid #555; color: #ddd; font-size: 12px; outline: none; font-family: inherit; min-width: 60px; max-width: 140px; padding: 0 2px; }
   .te-input-row { display: flex; gap: 8px; margin-bottom: 18px; }
   .te-input-row input {
     flex: 1; background: #111; border: 1px solid #252525; border-radius: 6px;
@@ -1093,9 +1092,16 @@ function renderEditorChips() {
     editBtn.className = 'te-chip-edit';
     editBtn.textContent = '✎';
     editBtn.title = 'Renombrar tag (global)';
-    editBtn.addEventListener('click', e => {
+    editBtn.addEventListener('click', async e => {
       e.stopPropagation();
-      startChipRename(chip, lbl, tag);
+      const newName = window.prompt(`Renombrar "${tag}":`, tag);
+      if (!newName) return;
+      const newTag = newName.trim().toLowerCase();
+      if (!newTag || newTag === tag) return;
+      await renameTagGlobally(tag, newTag);
+      editTags = editTags.map(t => t === tag ? newTag : t);
+      renderEditorChips();
+      renderEditorSuggestions();
     });
 
     const rm = document.createElement('button');
@@ -1112,34 +1118,6 @@ function renderEditorChips() {
   }
 }
 
-function startChipRename(chip, lbl, oldTag) {
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.value = oldTag;
-  input.className = 'te-chip-input';
-  input.style.width = Math.max(60, oldTag.length * 8) + 'px';
-  lbl.replaceWith(input);
-  input.focus();
-  input.select();
-
-  let confirmed = false;
-  const confirm = async () => {
-    if (confirmed) return;
-    confirmed = true;
-    const newTag = input.value.trim().toLowerCase();
-    if (!newTag || newTag === oldTag) { input.replaceWith(lbl); return; }
-    await renameTagGlobally(oldTag, newTag);
-    editTags = editTags.map(t => t === oldTag ? newTag : t);
-    renderEditorChips();
-    renderEditorSuggestions();
-  };
-
-  input.addEventListener('blur', confirm);
-  input.addEventListener('keydown', e => {
-    if (e.key === 'Enter') { e.preventDefault(); confirm(); }
-    if (e.key === 'Escape') { e.preventDefault(); confirmed = true; input.replaceWith(lbl); }
-  });
-}
 
 async function renameTagGlobally(oldTag, newTag) {
   const affected = Object.entries(metaMap).filter(([, tags]) => tags.includes(oldTag));
