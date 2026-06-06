@@ -12,8 +12,8 @@ Galería compartida de imágenes y vídeos de referencia para 4 personas (con PI
 ## Archivos
 ```
 /Desktop/Gallery/
-  index.html    ← galería masonry (10 cols) + lightbox + filtros + notas
-  upload.html   ← drag & drop upload con tags por batch + sugerencias
+  index.html    ← galería masonry (10 cols) + lightbox + filtros + notas + modal de upload
+  upload.html   ← página standalone (mantenida para compatibilidad, no es el flujo principal)
   config.js     ← credenciales Supabase + PIN (ya rellenas)
   auth.js       ← overlay de PIN (usa GALLERY_PIN de config.js)
   CLAUDE.md     ← este archivo
@@ -64,16 +64,16 @@ CREATE POLICY "public delete" ON flows FOR DELETE USING (true);
 - [x] Soporte de vídeos: autoplay muted loop en grid, controles en lightbox
 - [x] Click en imagen/vídeo → lightbox a tamaño completo
 - [x] Tags: se añaden en upload (por batch) y se editan desde el lightbox
+- [x] Renombrar tag globalmente desde el editor (botón ✎ → window.prompt → actualiza todas las imágenes y tag_meta)
+- [x] Subtags jerárquicos con `/` (ej: `component/button`). Filter bar agrupa por padre con barra secundaria de hijos al activar
 - [x] Sugerencias de tags existentes como botones pill (upload + editor del lightbox)
 - [x] Notas por imagen: campo editable inline en el lightbox, guardado en Supabase
-- [x] Filtro por tags en barra sticky (pills, 18px) bajo el header
+- [x] Filtro por tags en barra sticky bajo el header
 - [x] Click en tag dentro del lightbox → filtra la galería
 - [x] Borrar imagen/vídeo desde el lightbox (borra storage + metadata)
-- [x] Upload drag & drop múltiple con progreso
-- [x] Drag & drop en index.html → redirige a upload.html con archivos precargados (via IndexedDB)
-- [x] Drag & drop en upload.html → sube automáticamente sin pulsar botón
+- [x] Upload como modal drawer (panel derecho) dentro de index.html — botón "+ Upload" o drag & drop sobre la galería lo abre. Al cerrar recarga la galería automáticamente
 - [x] Tags Manager: crear/renombrar/borrar tags con descripciones y recuento de imágenes
-- [x] Flows: batch de imágenes agrupadas en 1 celda con badge de conteo. Click abre lightbox horizontal con scroll snap, flechas ← →, tags por slide, edit tags y delete por slide
+- [x] Flows: batch de imágenes agrupadas en 1 celda con badge de conteo. Click abre todas las imágenes en tira horizontal scrolleable, con tags y Edit/Delete por imagen
 - [x] PIN de acceso (auth.js)
 - [x] Desplegado en GitHub Pages
 
