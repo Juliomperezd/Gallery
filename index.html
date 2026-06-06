@@ -886,29 +886,42 @@ function openIDB() {
   });
 }
 
-const dropOverlay = document.getElementById('drop-overlay');
+function isMediaFile(f) {
+  return /^(image|video)\//i.test(f.type) ||
+    /\.(png|jpe?g|gif|webp|avif|svg|mp4|webm|mov|m4v|ogv)$/i.test(f.name);
+}
 
-document.addEventListener('dragenter', e => {
-  if ([...e.dataTransfer.items].some(i => i.kind === 'file'))
+const dropOverlay = document.getElementById('drop-overlay');
+let dragTimer;
+
+// dragover fires continuously while dragging — most reliable way to show overlay
+document.addEventListener('dragover', e => {
+  e.preventDefault();
+  if (e.dataTransfer.types.includes('Files')) {
     dropOverlay.classList.add('active');
+    clearTimeout(dragTimer);
+    dragTimer = setTimeout(() => dropOverlay.classList.remove('active'), 120);
+  }
 });
-document.addEventListener('dragleave', e => {
-  if (!document.documentElement.contains(e.relatedTarget))
-    dropOverlay.classList.remove('active');
-});
-document.addEventListener('dragover', e => e.preventDefault());
+
 document.addEventListener('drop', async e => {
   e.preventDefault();
+  clearTimeout(dragTimer);
   dropOverlay.classList.remove('active');
-  const files = [...e.dataTransfer.files].filter(f => /^(image|video)\//i.test(f.type));
+  const files = [...e.dataTransfer.files].filter(isMediaFile);
   if (!files.length) return;
-  const db = await openIDB();
-  const tx = db.transaction('files', 'readwrite');
-  const store = tx.objectStore('files');
-  store.clear();
-  files.forEach(f => store.put(f, f.name));
-  await new Promise(r => { tx.oncomplete = r; });
-  location.href = 'upload.html';
+  try {
+    const db = await openIDB();
+    const tx = db.transaction('files', 'readwrite');
+    const store = tx.objectStore('files');
+    store.clear();
+    files.forEach(f => store.put(f, f.name));
+    await new Promise(r => { tx.oncomplete = r; });
+    location.href = 'upload.html';
+  } catch(err) {
+    // IDB failed — fall back to upload page without pre-loaded files
+    location.href = 'upload.html';
+  }
 });
 </script>
 </body>

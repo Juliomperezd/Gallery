@@ -376,7 +376,9 @@ function uniqueName(name) {
 
 function addFiles(files) {
   for (const file of files) {
-    if (!/^(image|video)\//i.test(file.type)) continue;
+    const isMedia = /^(image|video)\//i.test(file.type) ||
+      /\.(png|jpe?g|gif|webp|avif|svg|mp4|webm|mov|m4v|ogv)$/i.test(file.name);
+    if (!isMedia) continue;
 
     const item = document.createElement('div');
     item.className = 'preview-item';
