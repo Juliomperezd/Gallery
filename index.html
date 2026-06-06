@@ -73,6 +73,8 @@
   .thumb img { width: 100%; height: auto; display: block; transition: transform 0.35s ease, opacity 0.3s; opacity: 0; }
   .thumb img.loaded { opacity: 1; }
   .thumb:hover img { transform: scale(1.03); }
+  .thumb video { width: 100%; height: auto; display: block; transition: transform 0.35s ease; }
+  .thumb:hover video { transform: scale(1.03); }
 
   /* Lightbox */
   #lightbox {
@@ -86,11 +88,12 @@
     width: 100vw; height: 100vh; gap: 16px; position: relative;
   }
 
-  #lb-img {
+  #lb-img, #lb-video {
     max-width: 88vw; max-height: 78vh;
     object-fit: contain; border-radius: 2px;
     box-shadow: 0 0 60px rgba(0,0,0,0.8);
   }
+  #lb-video { display: none; background: #000; }
 
   #lb-close {
     position: absolute; top: 20px; right: 24px;
@@ -334,6 +337,7 @@
   <div id="lb-wrap">
     <button id="lb-close" aria-label="Close">×</button>
     <img id="lb-img" src="" alt="">
+    <video id="lb-video" controls playsinline></video>
     <div id="lb-footer">
       <span id="lb-name"></span>
       <div id="lb-tags"></div>
@@ -393,6 +397,7 @@ const status    = document.getElementById('status');
 const filterBar = document.getElementById('filter-bar');
 const lb        = document.getElementById('lightbox');
 const lbImg     = document.getElementById('lb-img');
+const lbVideo   = document.getElementById('lb-video');
 const lbName    = document.getElementById('lb-name');
 const lbTags    = document.getElementById('lb-tags');
 const lbEditBtn = document.getElementById('lb-edit-btn');
@@ -427,7 +432,7 @@ async function load() {
     tagDescMap[row.tag] = row.description || '';
   }
 
-  const imgs = (storageRes.data || []).filter(f => /\.(png|jpe?g|gif|webp|avif|svg)$/i.test(f.name));
+  const imgs = (storageRes.data || []).filter(f => /\.(png|jpe?g|gif|webp|avif|svg|mp4|webm|mov|m4v|ogv)$/i.test(f.name));
   if (!imgs.length) { status.textContent = 'No images yet. Upload some!'; return; }
   status.style.display = 'none';
 
@@ -443,17 +448,32 @@ async function load() {
 
 // ── Thumb ─────────────────────────────────────────────────────────────────────
 
+function isVideo(filename) {
+  return /\.(mp4|webm|mov|m4v|ogv)$/i.test(filename);
+}
+
 function buildThumb(url, filename) {
   const card = document.createElement('div');
   card.className = 'thumb';
 
-  const img = document.createElement('img');
-  img.loading = 'lazy';
-  img.src = url;
-  img.alt = filename;
-  img.onload = () => img.classList.add('loaded');
+  let media;
+  if (isVideo(filename)) {
+    media = document.createElement('video');
+    media.src = url;
+    media.autoplay = true;
+    media.muted = true;
+    media.loop = true;
+    media.playsInline = true;
+    media.preload = 'metadata';
+  } else {
+    media = document.createElement('img');
+    media.loading = 'lazy';
+    media.src = url;
+    media.alt = filename;
+    media.onload = () => media.classList.add('loaded');
+  }
 
-  card.appendChild(img);
+  card.appendChild(media);
   card.addEventListener('click', () => openLightbox(url, filename));
   return card;
 }
@@ -536,10 +556,20 @@ document.getElementById('desc-save').addEventListener('click', async () => {
 // ── Lightbox ──────────────────────────────────────────────────────────────────
 
 function openLightbox(url, filename) {
-  lbFilename    = filename;
-  lbImg.src     = url;
+  lbFilename = filename;
   lbName.textContent = filename;
   renderLbTags(metaMap[filename] || []);
+  if (isVideo(filename)) {
+    lbImg.style.display = 'none';
+    lbVideo.src = url;
+    lbVideo.style.display = '';
+  } else {
+    lbImg.src = url;
+    lbImg.style.display = '';
+    lbVideo.style.display = 'none';
+    lbVideo.pause();
+    lbVideo.src = '';
+  }
   lb.showModal();
 }
 
@@ -571,6 +601,7 @@ function filterByTag(tag) {
 
 document.getElementById('lb-close').addEventListener('click', () => lb.close());
 lb.addEventListener('click', e => { if (e.target === lb || e.target.id === 'lb-wrap') lb.close(); });
+lb.addEventListener('close', () => { lbVideo.pause(); lbVideo.src = ''; });
 
 lbEditBtn.addEventListener('click', e => {
   e.stopPropagation();
@@ -869,7 +900,7 @@ document.addEventListener('dragover', e => e.preventDefault());
 document.addEventListener('drop', async e => {
   e.preventDefault();
   dropOverlay.classList.remove('active');
-  const files = [...e.dataTransfer.files].filter(f => /^image\//i.test(f.type));
+  const files = [...e.dataTransfer.files].filter(f => /^(image|video)\//i.test(f.type));
   if (!files.length) return;
   const db = await openIDB();
   const tx = db.transaction('files', 'readwrite');
