@@ -78,6 +78,27 @@
     text-transform: uppercase;
     margin-bottom: 10px;
   }
+  #tag-suggestions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 12px;
+    min-height: 0;
+  }
+  .tag-suggestion {
+    padding: 4px 10px;
+    background: none;
+    border: 1px solid #252525;
+    border-radius: 20px;
+    font-size: 12px;
+    color: #555;
+    cursor: pointer;
+    font-family: inherit;
+    letter-spacing: 0.02em;
+    transition: border-color 0.12s, color 0.12s, background 0.12s;
+  }
+  .tag-suggestion:hover { border-color: #444; color: #aaa; }
+  .tag-suggestion.active { border-color: #888; color: #ddd; background: #1a1a1a; }
   .tags-chips {
     display: flex;
     flex-wrap: wrap;
@@ -209,9 +230,10 @@
 
   <div id="tags-section">
     <label>Tags — applied to all images in this batch</label>
+    <div id="tag-suggestions"></div>
     <div id="upload-chips" class="tags-chips"></div>
     <div class="tags-input-row">
-      <input id="upload-tag-input" type="text" placeholder="Type a tag and press Enter or comma…">
+      <input id="upload-tag-input" type="text" placeholder="Type a new tag and press Enter or comma…">
     </div>
   </div>
 
@@ -231,18 +253,47 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const BUCKET   = 'images';
 
-const dropZone       = document.getElementById('drop-zone');
-const fileInput      = document.getElementById('file-input');
-const tagsSection    = document.getElementById('tags-section');
-const uploadChips    = document.getElementById('upload-chips');
-const uploadTagInput = document.getElementById('upload-tag-input');
-const previews       = document.getElementById('previews');
-const actions        = document.getElementById('actions');
-const uploadBtn      = document.getElementById('upload-btn');
-const globalSt       = document.getElementById('global-status');
+const dropZone        = document.getElementById('drop-zone');
+const fileInput       = document.getElementById('file-input');
+const tagsSection     = document.getElementById('tags-section');
+const tagSuggestions  = document.getElementById('tag-suggestions');
+const uploadChips     = document.getElementById('upload-chips');
+const uploadTagInput  = document.getElementById('upload-tag-input');
+const previews        = document.getElementById('previews');
+const actions         = document.getElementById('actions');
+const uploadBtn       = document.getElementById('upload-btn');
+const globalSt        = document.getElementById('global-status');
 
 let queue      = [];
 let uploadTags = [];
+
+// ── Existing tag suggestions ─────────────────────────────────────────────────
+
+async function loadTagSuggestions() {
+  const { data } = await supabase.from('image_meta').select('tags');
+  if (!data) return;
+  const all = [...new Set(data.flatMap(r => r.tags || []))].sort();
+  renderSuggestions(all);
+}
+
+function renderSuggestions(tags) {
+  tagSuggestions.innerHTML = '';
+  for (const tag of tags) {
+    const btn = document.createElement('button');
+    btn.className = 'tag-suggestion' + (uploadTags.includes(tag) ? ' active' : '');
+    btn.textContent = tag;
+    btn.addEventListener('click', () => {
+      if (uploadTags.includes(tag)) {
+        uploadTags = uploadTags.filter(t => t !== tag);
+      } else {
+        uploadTags.push(tag);
+      }
+      btn.classList.toggle('active', uploadTags.includes(tag));
+      renderUploadChips();
+    });
+    tagSuggestions.appendChild(btn);
+  }
+}
 
 // ── Tag input ────────────────────────────────────────────────────────────────
 
@@ -252,6 +303,10 @@ function addUploadTag() {
   uploadTags.push(val);
   uploadTagInput.value = '';
   renderUploadChips();
+  // sync suggestion button state if the new tag already exists as suggestion
+  tagSuggestions.querySelectorAll('.tag-suggestion').forEach(btn => {
+    btn.classList.toggle('active', uploadTags.includes(btn.textContent));
+  });
 }
 
 function renderUploadChips() {
@@ -264,7 +319,13 @@ function renderUploadChips() {
     const rm = document.createElement('button');
     rm.className = 'tags-chip-rm';
     rm.textContent = '×';
-    rm.addEventListener('click', () => { uploadTags = uploadTags.filter(t => t !== tag); renderUploadChips(); });
+    rm.addEventListener('click', () => {
+      uploadTags = uploadTags.filter(t => t !== tag);
+      renderUploadChips();
+      tagSuggestions.querySelectorAll('.tag-suggestion').forEach(btn => {
+        btn.classList.toggle('active', uploadTags.includes(btn.textContent));
+      });
+    });
     chip.append(lbl, rm);
     uploadChips.appendChild(chip);
   }
@@ -273,6 +334,8 @@ function renderUploadChips() {
 uploadTagInput.addEventListener('keydown', e => {
   if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addUploadTag(); }
 });
+
+loadTagSuggestions();
 
 // ── File queue ───────────────────────────────────────────────────────────────
 
