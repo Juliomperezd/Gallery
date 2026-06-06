@@ -26,17 +26,17 @@
     font-weight: 500;
     letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: #888;
+    color: #ccc;
   }
   header a {
     font-size: 12px;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: #555;
+    color: #aaa;
     text-decoration: none;
     transition: color 0.15s;
   }
-  header a:hover { color: #ccc; }
+  header a:hover { color: #fff; }
 
   main {
     max-width: 640px;
@@ -54,8 +54,8 @@
     position: relative;
   }
   #drop-zone.over { border-color: #555; background: #141414; }
-  #drop-zone p { font-size: 13px; color: #444; letter-spacing: 0.04em; pointer-events: none; }
-  #drop-zone p span { display: block; margin-top: 6px; font-size: 11px; color: #333; }
+  #drop-zone p { font-size: 13px; color: #888; letter-spacing: 0.04em; pointer-events: none; }
+  #drop-zone p span { display: block; margin-top: 6px; font-size: 11px; color: #666; }
   #file-input {
     position: absolute;
     inset: 0;
@@ -73,7 +73,7 @@
   #tags-section label {
     display: block;
     font-size: 11px;
-    color: #444;
+    color: #999;
     letter-spacing: 0.08em;
     text-transform: uppercase;
     margin-bottom: 10px;
@@ -88,17 +88,17 @@
   .tag-suggestion {
     padding: 4px 10px;
     background: none;
-    border: 1px solid #252525;
+    border: 1px solid #3a3a3a;
     border-radius: 20px;
     font-size: 12px;
-    color: #555;
+    color: #999;
     cursor: pointer;
     font-family: inherit;
     letter-spacing: 0.02em;
     transition: border-color 0.12s, color 0.12s, background 0.12s;
   }
-  .tag-suggestion:hover { border-color: #444; color: #aaa; }
-  .tag-suggestion.active { border-color: #888; color: #ddd; background: #1a1a1a; }
+  .tag-suggestion:hover { border-color: #666; color: #e0e0e0; }
+  .tag-suggestion.active { border-color: #aaa; color: #fff; background: #1a1a1a; }
   .tags-chips {
     display: flex;
     flex-wrap: wrap;
@@ -137,8 +137,8 @@
     outline: none;
     font-family: inherit;
   }
-  .tags-input-row input:focus { border-color: #333; }
-  .tags-input-row input::placeholder { color: #2e2e2e; }
+  .tags-input-row input:focus { border-color: #555; }
+  .tags-input-row input::placeholder { color: #555; }
 
   /* File previews */
   #previews {
@@ -167,7 +167,7 @@
   }
   .preview-info { overflow: hidden; }
   .preview-name { font-size: 12px; color: #bbb; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .preview-size { font-size: 10px; color: #444; margin-top: 3px; }
+  .preview-size { font-size: 10px; color: #777; margin-top: 3px; }
   .preview-bar-wrap {
     height: 2px;
     background: #1e1e1e;
@@ -176,7 +176,7 @@
     overflow: hidden;
   }
   .preview-bar { height: 100%; width: 0%; background: #fff; border-radius: 2px; transition: width 0.15s; }
-  .preview-state { font-size: 11px; color: #444; white-space: nowrap; min-width: 54px; text-align: right; }
+  .preview-state { font-size: 11px; color: #777; white-space: nowrap; min-width: 54px; text-align: right; }
   .preview-state.ok  { color: #5a8a5a; }
   .preview-state.err { color: #8a3a3a; }
 
