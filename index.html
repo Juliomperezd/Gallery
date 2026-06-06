@@ -136,23 +136,31 @@
     padding: 22px; width: 360px; max-width: 92vw;
   }
   #tag-editor::backdrop { background: rgba(0,0,0,0.75); }
-  #tag-editor h3 { font-size: 11px; font-weight: 500; color: #555; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 16px; }
+  #tag-editor h3 { font-size: 11px; font-weight: 500; color: #aaa; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 16px; }
+  #te-suggestions { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .te-suggestion {
+    padding: 4px 10px; background: none; border: 1px solid #3a3a3a; border-radius: 20px;
+    font-size: 12px; color: #999; cursor: pointer; font-family: inherit;
+    transition: border-color 0.12s, color 0.12s, background 0.12s;
+  }
+  .te-suggestion:hover { border-color: #666; color: #e0e0e0; }
+  .te-suggestion.active { border-color: #aaa; color: #fff; background: #1a1a1a; }
   .te-chips { display: flex; flex-wrap: wrap; gap: 6px; min-height: 28px; margin-bottom: 14px; }
-  .te-chip { display: flex; align-items: center; gap: 4px; padding: 4px 10px; background: #222; border-radius: 20px; font-size: 12px; color: #bbb; }
-  .te-chip-rm { background: none; border: none; color: #555; cursor: pointer; font-size: 15px; line-height: 1; padding: 0 0 0 2px; }
+  .te-chip { display: flex; align-items: center; gap: 4px; padding: 4px 10px; background: #222; border-radius: 20px; font-size: 12px; color: #ddd; }
+  .te-chip-rm { background: none; border: none; color: #666; cursor: pointer; font-size: 15px; line-height: 1; padding: 0 0 0 2px; }
   .te-chip-rm:hover { color: #fff; }
   .te-input-row { display: flex; gap: 8px; margin-bottom: 18px; }
   .te-input-row input {
     flex: 1; background: #111; border: 1px solid #252525; border-radius: 6px;
     color: #ccc; font-size: 13px; padding: 8px 11px; outline: none; font-family: inherit;
   }
-  .te-input-row input:focus { border-color: #444; }
-  .te-input-row input::placeholder { color: #333; }
-  .te-add-btn { padding: 8px 14px; background: #1e1e1e; border: 1px solid #2a2a2a; border-radius: 6px; color: #888; font-size: 12px; cursor: pointer; font-family: inherit; }
-  .te-add-btn:hover { color: #ccc; }
+  .te-input-row input:focus { border-color: #555; }
+  .te-input-row input::placeholder { color: #555; }
+  .te-add-btn { padding: 8px 14px; background: #1e1e1e; border: 1px solid #3a3a3a; border-radius: 6px; color: #bbb; font-size: 12px; cursor: pointer; font-family: inherit; }
+  .te-add-btn:hover { color: #fff; }
   .te-actions { display: flex; justify-content: flex-end; gap: 8px; }
-  .te-cancel { padding: 8px 18px; background: none; border: 1px solid #2a2a2a; border-radius: 6px; color: #555; font-size: 12px; cursor: pointer; font-family: inherit; }
-  .te-cancel:hover { color: #aaa; }
+  .te-cancel { padding: 8px 18px; background: none; border: 1px solid #3a3a3a; border-radius: 6px; color: #888; font-size: 12px; cursor: pointer; font-family: inherit; }
+  .te-cancel:hover { color: #ddd; }
   .te-save { padding: 8px 20px; background: #fff; border: none; border-radius: 6px; color: #0d0d0d; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
   .te-save:hover { opacity: 0.88; }
 
@@ -361,6 +369,7 @@
 
 <dialog id="tag-editor">
   <h3>Tags</h3>
+  <div id="te-suggestions"></div>
   <div id="te-chips" class="te-chips"></div>
   <div class="te-input-row">
     <input id="te-input" type="text" placeholder="Add a tag…">
@@ -387,9 +396,10 @@ const lbImg     = document.getElementById('lb-img');
 const lbName    = document.getElementById('lb-name');
 const lbTags    = document.getElementById('lb-tags');
 const lbEditBtn = document.getElementById('lb-edit-btn');
-const tagDlg    = document.getElementById('tag-editor');
-const teChips   = document.getElementById('te-chips');
-const teInput   = document.getElementById('te-input');
+const tagDlg       = document.getElementById('tag-editor');
+const teChips      = document.getElementById('te-chips');
+const teSuggestions = document.getElementById('te-suggestions');
+const teInput      = document.getElementById('te-input');
 
 let metaMap       = {};
 let tagDescMap    = {};
@@ -592,8 +602,34 @@ document.getElementById('lb-delete-btn').addEventListener('click', async e => {
 function openEditor(filename) {
   editTags = [...(metaMap[filename] || [])];
   teInput.value = '';
+  renderEditorSuggestions();
   renderEditorChips();
   tagDlg.showModal();
+}
+
+function syncSuggestionStates() {
+  teSuggestions.querySelectorAll('.te-suggestion').forEach(btn => {
+    btn.classList.toggle('active', editTags.includes(btn.textContent));
+  });
+}
+
+function renderEditorSuggestions() {
+  teSuggestions.innerHTML = '';
+  for (const tag of getAllTags()) {
+    const btn = document.createElement('button');
+    btn.className = 'te-suggestion' + (editTags.includes(tag) ? ' active' : '');
+    btn.textContent = tag;
+    btn.addEventListener('click', () => {
+      if (editTags.includes(tag)) {
+        editTags = editTags.filter(t => t !== tag);
+      } else {
+        editTags.push(tag);
+      }
+      btn.classList.toggle('active', editTags.includes(tag));
+      renderEditorChips();
+    });
+    teSuggestions.appendChild(btn);
+  }
 }
 
 function renderEditorChips() {
@@ -606,7 +642,11 @@ function renderEditorChips() {
     const rm = document.createElement('button');
     rm.className = 'te-chip-rm';
     rm.textContent = '×';
-    rm.addEventListener('click', () => { editTags = editTags.filter(t => t !== tag); renderEditorChips(); });
+    rm.addEventListener('click', () => {
+      editTags = editTags.filter(t => t !== tag);
+      renderEditorChips();
+      syncSuggestionStates();
+    });
     chip.append(lbl, rm);
     teChips.appendChild(chip);
   }
@@ -618,6 +658,7 @@ function commitTag() {
   editTags.push(val);
   teInput.value = '';
   renderEditorChips();
+  syncSuggestionStates();
 }
 
 document.getElementById('te-add').addEventListener('click', commitTag);
