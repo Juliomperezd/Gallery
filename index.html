@@ -28,12 +28,110 @@
   }
   header h1 { font-size: 13px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: #ccc; }
   #header-actions { display: flex; align-items: center; gap: 8px; }
-  header a, #tags-manager-btn {
+  header a, #tags-manager-btn, #open-upload-btn {
     font-size: 12px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase;
     color: #fff; text-decoration: none; padding: 6px 14px; border: 1px solid #555; border-radius: 4px;
     transition: border-color 0.15s; background: none; cursor: pointer; font-family: inherit;
   }
-  header a:hover, #tags-manager-btn:hover { border-color: #aaa; }
+  header a:hover, #tags-manager-btn:hover, #open-upload-btn:hover { border-color: #aaa; }
+
+  /* Upload modal */
+  #upload-modal {
+    border: none; background: transparent; padding: 0;
+    max-width: 100vw; max-height: 100vh; width: 100vw; height: 100vh; outline: none;
+  }
+  #upload-modal::backdrop { background: rgba(0,0,0,0.65); cursor: pointer; }
+  #um-wrap {
+    position: absolute; top: 0; right: 0; bottom: 0;
+    width: 500px; max-width: 100vw;
+    background: #0d0d0d; border-left: 1px solid #1e1e1e;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  #um-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 24px; border-bottom: 1px solid #1e1e1e; flex-shrink: 0;
+  }
+  #um-header span { font-size: 13px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: #ccc; }
+  #um-close { background: none; border: none; color: #555; font-size: 24px; cursor: pointer; line-height: 1; padding: 0; transition: color 0.15s; }
+  #um-close:hover { color: #fff; }
+  #um-body { flex: 1; overflow-y: auto; padding: 28px 24px; display: flex; flex-direction: column; gap: 20px; scrollbar-width: thin; scrollbar-color: #2a2a2a transparent; }
+  #um-body::-webkit-scrollbar { width: 4px; }
+  #um-body::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 2px; }
+
+  #um-drop-zone {
+    border: 1px dashed #2a2a2a; border-radius: 6px; padding: 52px 24px;
+    text-align: center; cursor: pointer; transition: border-color 0.2s, background 0.2s;
+    position: relative; flex-shrink: 0;
+  }
+  #um-drop-zone.over { border-color: #555; background: #141414; }
+  #um-drop-zone p { font-size: 13px; color: #888; letter-spacing: 0.04em; pointer-events: none; }
+  #um-drop-zone p span { display: block; margin-top: 6px; font-size: 11px; color: #666; }
+  #um-file-input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+
+  #um-tags-section label { display: block; font-size: 11px; color: #999; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 10px; }
+  #um-tag-suggestions { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  #um-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  #um-tag-input {
+    width: 100%; background: #111; border: 1px solid #1e1e1e; border-radius: 4px;
+    color: #ccc; font-size: 13px; padding: 8px 11px; outline: none; font-family: inherit;
+  }
+  #um-tag-input:focus { border-color: #555; }
+  #um-tag-input::placeholder { color: #555; }
+
+  .tag-suggestion {
+    padding: 4px 10px; background: none; border: 1px solid #3a3a3a; border-radius: 20px;
+    font-size: 12px; color: #999; cursor: pointer; font-family: inherit; letter-spacing: 0.02em;
+    transition: border-color 0.12s, color 0.12s, background 0.12s;
+  }
+  .tag-suggestion:hover { border-color: #666; color: #e0e0e0; }
+  .tag-suggestion.active { border-color: #aaa; color: #fff; background: #1a1a1a; }
+  .tags-chip { display: flex; align-items: center; gap: 4px; padding: 4px 10px; background: #1a1a1a; border-radius: 20px; font-size: 12px; color: #aaa; border: 1px solid #2a2a2a; }
+  .tags-chip-rm { background: none; border: none; color: #555; cursor: pointer; font-size: 15px; line-height: 1; padding: 0 0 0 2px; }
+  .tags-chip-rm:hover { color: #fff; }
+
+  #um-flow-row { display: flex; align-items: center; gap: 10px; }
+  #um-flow-toggle {
+    display: flex; align-items: center; gap: 8px;
+    background: none; border: 1px solid #2a2a2a; border-radius: 4px;
+    color: #666; font-size: 12px; padding: 7px 14px; cursor: pointer;
+    font-family: inherit; letter-spacing: 0.04em; transition: border-color 0.15s, color 0.15s;
+    white-space: nowrap;
+  }
+  #um-flow-toggle:hover { border-color: #444; color: #ccc; }
+  #um-flow-toggle.on { border-color: #aaa; color: #fff; }
+  #um-flow-toggle .dot { width: 7px; height: 7px; border-radius: 50%; background: #333; transition: background 0.15s; flex-shrink: 0; }
+  #um-flow-toggle.on .dot { background: #fff; }
+  #um-flow-name {
+    flex: 1; display: none; background: #111; border: 1px solid #1e1e1e;
+    border-radius: 4px; color: #ccc; font-size: 13px; padding: 7px 11px;
+    outline: none; font-family: inherit;
+  }
+  #um-flow-name.visible { display: block; }
+  #um-flow-name:focus { border-color: #555; }
+  #um-flow-name::placeholder { color: #444; }
+
+  .um-preview-item {
+    display: grid; grid-template-columns: 52px 1fr auto;
+    align-items: center; gap: 12px;
+    background: #111; border-radius: 4px; padding: 10px 12px; border: 1px solid #1a1a1a;
+  }
+  .um-preview-item img, .um-preview-item video { width: 52px; height: 40px; object-fit: cover; border-radius: 3px; background: #1a1a1a; }
+  .um-preview-info { overflow: hidden; }
+  .um-preview-name { font-size: 12px; color: #bbb; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .um-preview-size { font-size: 10px; color: #777; margin-top: 3px; }
+  .um-preview-bar-wrap { height: 2px; background: #1e1e1e; border-radius: 2px; margin-top: 6px; overflow: hidden; }
+  .um-preview-bar { height: 100%; width: 0%; background: #fff; border-radius: 2px; transition: width 0.15s; }
+  .um-preview-state { font-size: 11px; color: #777; white-space: nowrap; min-width: 54px; text-align: right; }
+  .um-preview-state.ok { color: #5a8a5a; }
+  .um-preview-state.err { color: #8a3a3a; }
+
+  #um-upload-btn {
+    padding: 10px 28px; background: #fff; color: #0d0d0d; border: none;
+    border-radius: 4px; font-size: 13px; font-weight: 600; letter-spacing: 0.06em;
+    text-transform: uppercase; cursor: pointer; transition: opacity 0.15s; font-family: inherit;
+  }
+  #um-upload-btn:disabled { opacity: 0.3; cursor: default; }
+  #um-status { font-size: 12px; color: #555; letter-spacing: 0.04em; min-height: 16px; }
 
   /* Filter bar */
   #filter-bar {
@@ -430,14 +528,13 @@
 
 <div id="drop-overlay">
   <p>Drop to upload</p>
-  <span>te llevará a la página de subida</span>
 </div>
 
 <header>
   <h1>Refs</h1>
   <div id="header-actions">
     <button id="tags-manager-btn">Tags</button>
-    <a href="upload.html">+ Upload</a>
+    <button id="open-upload-btn">+ Upload</button>
   </div>
 </header>
 
@@ -503,6 +600,40 @@
   </div>
 </dialog>
 
+<dialog id="upload-modal">
+  <div id="um-wrap">
+    <div id="um-header">
+      <span>Upload</span>
+      <button id="um-close">×</button>
+    </div>
+    <div id="um-body">
+      <div id="um-drop-zone">
+        <input type="file" id="um-file-input" multiple accept="image/*,video/*">
+        <p>Drop or click to browse
+          <span>PNG, JPG, GIF, WEBP, MP4, WEBM, MOV · no limit per file</span>
+        </p>
+      </div>
+      <div id="um-tags-section" style="display:none">
+        <label>Tags — applied to all files</label>
+        <div id="um-tag-suggestions"></div>
+        <div id="um-chips"></div>
+        <input id="um-tag-input" type="text" placeholder="Add a tag and press Enter…">
+      </div>
+      <div id="um-flow-section" style="display:none">
+        <div id="um-flow-row">
+          <button id="um-flow-toggle"><span class="dot"></span>Group as Flow</button>
+          <input id="um-flow-name" type="text" placeholder="Flow name (optional)">
+        </div>
+      </div>
+      <div id="um-previews"></div>
+      <div id="um-actions" style="display:none">
+        <button id="um-upload-btn">Upload</button>
+      </div>
+      <div id="um-status"></div>
+    </div>
+  </div>
+</dialog>
+
 <dialog id="flow-lb">
   <div id="flow-lb-wrap">
     <button id="flow-lb-close">×</button>
@@ -557,6 +688,12 @@ let editTags      = [];
 // ── Load ─────────────────────────────────────────────────────────────────────
 
 async function load() {
+  grid.innerHTML = '';
+  thumbRegistry = [];
+  metaMap = {}; notesMap = {}; tagDescMap = {};
+  fileFlowMap = {}; flowDataMap = {};
+  status.textContent = 'Loading…'; status.style.display = '';
+
   const [storageRes, metaRes, tagDescRes, flowsRes] = await Promise.all([
     supabase.storage.from(BUCKET).list('', { limit: 500, sortBy: { column: 'created_at', order: 'desc' } }),
     supabase.from('image_meta').select('filename, tags, notes, flow_id'),
@@ -1401,15 +1538,6 @@ load();
 
 // ── Global drag-to-upload ─────────────────────────────────────────────────────
 
-function openIDB() {
-  return new Promise((res, rej) => {
-    const r = indexedDB.open('refs-pending', 1);
-    r.onupgradeneeded = () => r.result.createObjectStore('files');
-    r.onsuccess = () => res(r.result);
-    r.onerror = () => rej(r.error);
-  });
-}
-
 function isMediaFile(f) {
   return /^(image|video)\//i.test(f.type) ||
     /\.(png|jpe?g|gif|webp|avif|svg|mp4|webm|mov|m4v|ogv)$/i.test(f.name);
@@ -1418,7 +1546,6 @@ function isMediaFile(f) {
 const dropOverlay = document.getElementById('drop-overlay');
 let dragTimer;
 
-// dragover fires continuously while dragging — most reliable way to show overlay
 document.addEventListener('dragover', e => {
   e.preventDefault();
   if (e.dataTransfer.types.includes('Files')) {
@@ -1428,25 +1555,193 @@ document.addEventListener('dragover', e => {
   }
 });
 
-document.addEventListener('drop', async e => {
+document.addEventListener('drop', e => {
   e.preventDefault();
   clearTimeout(dragTimer);
   dropOverlay.classList.remove('active');
   const files = [...e.dataTransfer.files].filter(isMediaFile);
   if (!files.length) return;
-  try {
-    const db = await openIDB();
-    const tx = db.transaction('files', 'readwrite');
-    const store = tx.objectStore('files');
-    store.clear();
-    files.forEach(f => store.put(f, f.name));
-    await new Promise(r => { tx.oncomplete = r; });
-    location.href = 'upload.html';
-  } catch(err) {
-    // IDB failed — fall back to upload page without pre-loaded files
-    location.href = 'upload.html';
-  }
+  openUploadModal(files);
 });
+
+// ── Upload modal ──────────────────────────────────────────────────────────────
+
+const uploadModal   = document.getElementById('upload-modal');
+const umDropZone    = document.getElementById('um-drop-zone');
+const umFileInput   = document.getElementById('um-file-input');
+const umTagSugg     = document.getElementById('um-tag-suggestions');
+const umChipsEl     = document.getElementById('um-chips');
+const umTagInput    = document.getElementById('um-tag-input');
+const umTagsSect    = document.getElementById('um-tags-section');
+const umFlowSect    = document.getElementById('um-flow-section');
+const umFlowToggle  = document.getElementById('um-flow-toggle');
+const umFlowName    = document.getElementById('um-flow-name');
+const umPreviews    = document.getElementById('um-previews');
+const umActions     = document.getElementById('um-actions');
+const umUploadBtn   = document.getElementById('um-upload-btn');
+const umStatus      = document.getElementById('um-status');
+
+let umQueue     = [];
+let umTags      = [];
+let umFlowMode  = false;
+let umDidUpload = false;
+
+function openUploadModal(files) {
+  umQueue = []; umTags = []; umFlowMode = false; umDidUpload = false;
+  umFlowToggle.classList.remove('on');
+  umFlowName.classList.remove('visible'); umFlowName.value = '';
+  umPreviews.innerHTML = '';
+  umActions.style.display = 'none';
+  umTagsSect.style.display = 'none';
+  umFlowSect.style.display = 'none';
+  umStatus.textContent = '';
+  umChipsEl.innerHTML = '';
+  umTagInput.value = '';
+  umUploadBtn.disabled = false;
+  renderUmSuggestions();
+  uploadModal.showModal();
+  if (files?.length) umAddFiles(files);
+}
+
+function renderUmSuggestions() {
+  umTagSugg.innerHTML = '';
+  for (const tag of getAllTags()) {
+    const btn = document.createElement('button');
+    btn.className = 'tag-suggestion' + (umTags.includes(tag) ? ' active' : '');
+    btn.textContent = tag;
+    btn.addEventListener('click', () => {
+      umTags.includes(tag) ? (umTags = umTags.filter(t => t !== tag)) : umTags.push(tag);
+      btn.classList.toggle('active', umTags.includes(tag));
+      renderUmChips();
+    });
+    umTagSugg.appendChild(btn);
+  }
+}
+
+function renderUmChips() {
+  umChipsEl.innerHTML = '';
+  for (const tag of umTags) {
+    const chip = document.createElement('div'); chip.className = 'tags-chip';
+    const lbl = document.createElement('span'); lbl.textContent = tag;
+    const rm = document.createElement('button'); rm.className = 'tags-chip-rm'; rm.textContent = '×';
+    rm.addEventListener('click', () => {
+      umTags = umTags.filter(t => t !== tag); renderUmChips();
+      umTagSugg.querySelectorAll('.tag-suggestion').forEach(b => b.classList.toggle('active', umTags.includes(b.textContent)));
+    });
+    chip.append(lbl, rm); umChipsEl.appendChild(chip);
+  }
+}
+
+function addUmTag() {
+  const val = umTagInput.value.trim().toLowerCase();
+  if (!val || umTags.includes(val)) { umTagInput.value = ''; return; }
+  umTags.push(val); umTagInput.value = '';
+  renderUmChips();
+  umTagSugg.querySelectorAll('.tag-suggestion').forEach(b => b.classList.toggle('active', umTags.includes(b.textContent)));
+}
+
+umTagInput.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addUmTag(); } });
+
+umFlowToggle.addEventListener('click', () => {
+  umFlowMode = !umFlowMode;
+  umFlowToggle.classList.toggle('on', umFlowMode);
+  umFlowName.classList.toggle('visible', umFlowMode);
+});
+
+function umFormatBytes(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1024 ** 2) return (b / 1024).toFixed(0) + ' KB';
+  return (b / 1024 ** 2).toFixed(1) + ' MB';
+}
+
+function umUniqueName(name) {
+  const ts = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
+  const dot = name.lastIndexOf('.');
+  const base = dot > -1 ? name.slice(0, dot) : name;
+  const ext  = dot > -1 ? name.slice(dot) : '';
+  return `ref_${ts}_${base}${ext}`;
+}
+
+function umAddFiles(files) {
+  for (const file of files) {
+    const isMedia = /^(image|video)\//i.test(file.type) ||
+      /\.(png|jpe?g|gif|webp|avif|svg|mp4|webm|mov|m4v|ogv)$/i.test(file.name);
+    if (!isMedia) continue;
+
+    const item = document.createElement('div'); item.className = 'um-preview-item';
+    let thumb;
+    if (/^video\//i.test(file.type)) {
+      thumb = document.createElement('video');
+      thumb.src = URL.createObjectURL(file); thumb.muted = true; thumb.preload = 'metadata';
+    } else {
+      thumb = document.createElement('img');
+      thumb.src = URL.createObjectURL(file);
+    }
+    const info = document.createElement('div'); info.className = 'um-preview-info';
+    const nameEl = document.createElement('div'); nameEl.className = 'um-preview-name'; nameEl.textContent = file.name;
+    const sizeEl = document.createElement('div'); sizeEl.className = 'um-preview-size'; sizeEl.textContent = umFormatBytes(file.size);
+    const barWrap = document.createElement('div'); barWrap.className = 'um-preview-bar-wrap';
+    const bar = document.createElement('div'); bar.className = 'um-preview-bar'; barWrap.appendChild(bar);
+    info.append(nameEl, sizeEl, barWrap);
+    const stateEl = document.createElement('div'); stateEl.className = 'um-preview-state'; stateEl.textContent = 'Ready';
+    item.append(thumb, info, stateEl);
+    umPreviews.appendChild(item);
+    umQueue.push({ file, bar, stateEl });
+  }
+  if (umQueue.length > 0) {
+    umActions.style.display = 'block';
+    umTagsSect.style.display = 'block';
+    umFlowSect.style.display = 'block';
+  }
+}
+
+umDropZone.addEventListener('dragover', e => { e.preventDefault(); umDropZone.classList.add('over'); });
+umDropZone.addEventListener('dragleave', () => umDropZone.classList.remove('over'));
+umDropZone.addEventListener('drop', e => { e.preventDefault(); umDropZone.classList.remove('over'); umAddFiles(e.dataTransfer.files); });
+umFileInput.addEventListener('change', () => { umAddFiles(umFileInput.files); umFileInput.value = ''; });
+
+umUploadBtn.addEventListener('click', async () => {
+  const pending = umQueue.filter(q => q.stateEl.textContent === 'Ready');
+  if (!pending.length) return;
+
+  umUploadBtn.disabled = true;
+  umStatus.textContent = `Uploading ${pending.length} file${pending.length > 1 ? 's' : ''}…`;
+
+  let flowId = null;
+  if (umFlowMode && pending.length > 0) {
+    flowId = 'flow_' + Date.now();
+    const { error: flowErr } = await supabase.from('flows').upsert({ id: flowId, name: umFlowName.value.trim() });
+    if (flowErr) { umStatus.textContent = 'Error creating flow: ' + flowErr.message; umUploadBtn.disabled = false; return; }
+  }
+
+  let done = 0;
+  for (const item of pending) {
+    item.stateEl.textContent = '…'; item.bar.style.width = '30%';
+    const targetName = umUniqueName(item.file.name);
+    const { error } = await supabase.storage.from(BUCKET).upload(targetName, item.file, { cacheControl: '3600', upsert: false });
+    item.bar.style.width = '100%';
+    if (error) {
+      item.stateEl.textContent = 'Error'; item.stateEl.classList.add('err');
+    } else {
+      if (umTags.length > 0 || flowId) {
+        const meta = { filename: targetName, tags: umTags };
+        if (flowId) meta.flow_id = flowId;
+        await supabase.from('image_meta').upsert(meta);
+      }
+      item.stateEl.textContent = 'Done ✓'; item.stateEl.classList.add('ok');
+      done++; umDidUpload = true;
+    }
+  }
+
+  umStatus.textContent = `${done} of ${pending.length} uploaded.`;
+  umUploadBtn.disabled = false;
+  umQueue = umQueue.filter(q => q.stateEl.textContent === 'Error');
+});
+
+document.getElementById('open-upload-btn').addEventListener('click', () => openUploadModal());
+document.getElementById('um-close').addEventListener('click', () => uploadModal.close());
+uploadModal.addEventListener('click', e => { if (e.target === uploadModal) uploadModal.close(); });
+uploadModal.addEventListener('close', () => { if (umDidUpload) load(); });
 </script>
 </body>
 </html>
