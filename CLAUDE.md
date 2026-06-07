@@ -74,6 +74,9 @@ CREATE POLICY "public delete" ON flows FOR DELETE USING (true);
 - [x] Upload como modal drawer (panel derecho) dentro de index.html — botón "+ Upload" o drag & drop sobre la galería lo abre. Al cerrar recarga la galería automáticamente
 - [x] Tags Manager: crear/renombrar/borrar tags con descripciones y recuento de imágenes
 - [x] Flows: batch de imágenes agrupadas en 1 celda con badge de conteo. Click abre todas las imágenes en tira horizontal scrolleable, con tags y Edit/Delete por imagen
+- [x] Flow card: badge de conteo arriba a la derecha + tira de miniaturas (11px) en la parte inferior con degradado oscuro
+- [x] Tag description panel: muestra el nombre del tag como título encima de la descripción al filtrar
+- [x] Tags Manager: botón "rename" por tag para renombrar globalmente (además del ✎ de descripción)
 - [x] PIN de acceso (auth.js)
 - [x] Desplegado en GitHub Pages
 
