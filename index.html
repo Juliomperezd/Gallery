@@ -427,10 +427,12 @@
   .tm-tag-name { font-size: 13px; color: #ccc; font-weight: 500; flex: 1; }
   .tm-tag-count { font-size: 10px; color: #666; letter-spacing: 0.05em; white-space: nowrap; }
   .tm-row-actions { display: flex; gap: 2px; }
-  .tm-edit-btn, .tm-del-btn {
+  .tm-rename-btn, .tm-edit-btn, .tm-del-btn {
     background: none; border: none; cursor: pointer; font-size: 14px;
     padding: 3px 7px; border-radius: 3px; transition: color 0.15s, background 0.15s; line-height: 1;
   }
+  .tm-rename-btn { color: #777; font-size: 11px; letter-spacing: 0.03em; }
+  .tm-rename-btn:hover { color: #fff; background: #222; }
   .tm-edit-btn { color: #777; }
   .tm-edit-btn:hover { color: #fff; background: #222; }
   .tm-del-btn { color: #a05050; }
@@ -480,7 +482,7 @@
   .flow-thumb-mini {
     width: 18px; height: 18px; border-radius: 2px;
     object-fit: cover; border: 1px solid rgba(255,255,255,0.12);
-    display: block;
+    display: block; opacity: 1;
   }
   .thumb.flow-card::before {
     content: ''; position: absolute; inset: 0;
@@ -1376,6 +1378,11 @@ function buildTagRow(tag) {
   const actions = document.createElement('div');
   actions.className = 'tm-row-actions';
 
+  const renameBtn = document.createElement('button');
+  renameBtn.className = 'tm-rename-btn';
+  renameBtn.title = 'Renombrar tag';
+  renameBtn.textContent = 'rename';
+
   const editBtn = document.createElement('button');
   editBtn.className = 'tm-edit-btn';
   editBtn.title = 'Editar descripción';
@@ -1386,7 +1393,7 @@ function buildTagRow(tag) {
   delBtn.title = 'Eliminar tag';
   delBtn.textContent = '×';
 
-  actions.append(editBtn, delBtn);
+  actions.append(renameBtn, editBtn, delBtn);
   top.append(nameEl, countEl, actions);
 
   const descView = document.createElement('div');
@@ -1416,6 +1423,15 @@ function buildTagRow(tag) {
   editActions.append(cancelBtn, saveBtn);
   descEdit.append(ta, editActions);
   row.append(top, descView, descEdit);
+
+  renameBtn.addEventListener('click', async () => {
+    const newName = window.prompt(`Renombrar "${tag}":`, tag);
+    if (!newName) return;
+    const newTag = newName.trim().toLowerCase();
+    if (!newTag || newTag === tag) return;
+    await renameTagGlobally(tag, newTag);
+    renderTagsManager();
+  });
 
   editBtn.addEventListener('click', () => {
     descView.style.display = 'none';
