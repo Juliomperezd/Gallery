@@ -475,13 +475,14 @@
     letter-spacing: 0.04em; pointer-events: none; z-index: 2;
   }
   .flow-thumbs {
-    position: absolute; bottom: 5px; left: 5px;
-    display: flex; gap: 2px;
+    position: absolute; bottom: 0; left: 0; right: 0;
+    display: flex; gap: 2px; padding: 4px 5px;
+    background: linear-gradient(transparent, rgba(0,0,0,0.55));
     pointer-events: none; z-index: 2;
   }
   .flow-thumb-mini {
-    width: 16px; height: 16px; border-radius: 2px;
-    object-fit: cover; border: 1px solid rgba(255,255,255,0.15);
+    flex: 1; min-width: 0; height: 22px; border-radius: 2px;
+    object-fit: cover;
     display: block;
   }
   .thumb img.flow-thumb-mini { opacity: 1; }
