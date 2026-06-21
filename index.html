@@ -1787,6 +1787,7 @@ async function listAllFiles() {
 async function runExport() {
   exportAborted = false;
   exportBtn.disabled = true;
+  exportCancel.textContent = 'Cancel';
   exportOverlay.classList.add('show');
   setExportProgress(0, 'Reading library…');
 
@@ -1811,30 +1812,15 @@ async function runExport() {
 
     const zip = new JSZip();
 
-    // Full-fidelity manifest at the root — everything needed to restore.
-    const manifest = {
-      exported_at: new Date().toISOString(),
-      bucket: BUCKET,
-      counts: { images: files.length, tags: Object.keys(tagDesc).length, flows: Object.keys(flows).length },
-      tag_descriptions: tagDesc,
-      flows,
-      images: files.map(f => ({
-        filename: f.name,
-        tags: meta[f.name]?.tags || [],
-        notes: meta[f.name]?.notes || '',
-        flow_id: meta[f.name]?.flow_id || null
-      }))
-    };
-    zip.file('metadata.json', JSON.stringify(manifest, null, 2));
-
     // Download each file and place a copy in every tag folder it belongs to.
     let done = 0;
+    const failed = [];
     for (const f of files) {
       if (exportAborted) { setExportProgress(0, 'Cancelled.'); return; }
       setExportProgress(Math.round((done / files.length) * 95), `Downloading ${done + 1} / ${files.length}…`);
 
       const { data: blob, error } = await supabase.storage.from(BUCKET).download(f.name);
-      if (error || !blob) { console.warn('Skipped', f.name, error); done++; continue; }
+      if (error || !blob) { console.warn('Skipped', f.name, error); failed.push(f.name); done++; continue; }
 
       const tags = meta[f.name]?.tags || [];
       if (tags.length) {
@@ -1851,6 +1837,42 @@ async function runExport() {
 
     if (exportAborted) { setExportProgress(0, 'Cancelled.'); return; }
 
+    const downloaded = files.length - failed.length;
+
+    // Full-fidelity manifest at the root — everything needed to restore.
+    const manifest = {
+      exported_at: new Date().toISOString(),
+      bucket: BUCKET,
+      counts: {
+        images_in_library: files.length,
+        downloaded,
+        failed: failed.length,
+        tags: Object.keys(tagDesc).length,
+        flows: Object.keys(flows).length
+      },
+      failed_downloads: failed,
+      tag_descriptions: tagDesc,
+      flows,
+      images: files.map(f => ({
+        filename: f.name,
+        tags: meta[f.name]?.tags || [],
+        notes: meta[f.name]?.notes || '',
+        flow_id: meta[f.name]?.flow_id || null
+      }))
+    };
+    zip.file('metadata.json', JSON.stringify(manifest, null, 2));
+
+    // Plain-text summary so you can check counts without opening the JSON.
+    const report =
+      `Refs backup — ${manifest.exported_at}\n` +
+      `Images in library: ${files.length}\n` +
+      `Downloaded OK:     ${downloaded}\n` +
+      `Failed:            ${failed.length}\n` +
+      `Tags:              ${Object.keys(tagDesc).length}\n` +
+      `Flows:             ${Object.keys(flows).length}\n` +
+      (failed.length ? `\nFailed files:\n` + failed.map(n => '  - ' + n).join('\n') + '\n' : '');
+    zip.file('_EXPORT-REPORT.txt', report);
+
     setExportProgress(97, 'Compressing…');
     const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
     const content = await zip.generateAsync({ type: 'blob' }, m => {
@@ -1866,8 +1888,13 @@ async function runExport() {
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 30000);
 
-    setExportProgress(100, 'Done ✓');
-    setTimeout(() => exportOverlay.classList.remove('show'), 900);
+    if (failed.length) {
+      setExportProgress(100, `Done — ${downloaded}/${files.length} images (${failed.length} failed, see _EXPORT-REPORT.txt)`);
+      exportCancel.textContent = 'Close';
+    } else {
+      setExportProgress(100, `Done ✓ — ${files.length} images backed up`);
+      setTimeout(() => exportOverlay.classList.remove('show'), 1800);
+    }
   } catch (err) {
     console.error(err);
     alert('Export failed: ' + (err.message || err));
