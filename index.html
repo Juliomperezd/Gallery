@@ -689,6 +689,7 @@
 <script type="module">
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import JSZip from 'https://esm.sh/jszip@3.10.1';
+import { makeZip } from 'https://esm.sh/client-zip@2.4.5';
 
 const supabase  = createClient(SUPABASE_URL, SUPABASE_KEY);
 const BUCKET    = 'images';
@@ -1804,6 +1805,35 @@ async function listAllFiles() {
   return all.filter(f => /\.(png|jpe?g|gif|webp|avif|svg|mp4|webm|mov|m4v|ogv)$/i.test(f.name));
 }
 
+// Zip paths a file belongs to: one per tag (subtags nest), or _uncategorized.
+function zipPathsFor(name, meta) {
+  const tags = meta[name]?.tags || [];
+  if (!tags.length) return [`_uncategorized/${safePath(name)}`];
+  return tags.map(tag => tag.split('/').map(safePath).join('/') + '/' + safePath(name));
+}
+
+// Download files in order, prefetching up to `concurrency` ahead so the network
+// stays busy while we yield one at a time to the (sequential) zip writer.
+async function* prefetch(files, concurrency) {
+  const buf = new Map(); // index -> Promise<{blob, err}>
+  let next = 0;
+  const schedule = () => {
+    while (buf.size < concurrency && next < files.length) {
+      const i = next++;
+      buf.set(i, fetchBlobWithRetry(files[i].name).then(
+        blob => ({ blob, err: null }), err => ({ blob: null, err })));
+    }
+  };
+  schedule();
+  for (let i = 0; i < files.length; i++) {
+    if (exportAborted) return;
+    const res = await buf.get(i);
+    buf.delete(i);
+    schedule();
+    yield { file: files[i], ...res };
+  }
+}
+
 async function runExport() {
   exportAborted = false;
   exportBtn.disabled = true;
@@ -1819,7 +1849,7 @@ async function runExport() {
       supabase.from('flows').select('id, name, created_at')
     ]);
 
-    if (!files.length) { alert('No images to export.'); return; }
+    if (!files.length) { alert('No images to export.'); exportOverlay.classList.remove('show'); return; }
 
     const meta = {};
     for (const r of (metaRes.data || [])) {
@@ -1830,58 +1860,17 @@ async function runExport() {
     const flows = {};
     for (const r of (flowsRes.data || [])) flows[r.id] = { name: r.name || '', created_at: r.created_at || null };
 
-    const zip = new JSZip();
-
-    // Place a downloaded blob into every tag folder it belongs to.
-    function addToZip(name, blob) {
-      const tags = meta[name]?.tags || [];
-      if (tags.length) {
-        for (const tag of tags) {
-          // Subtags like "component/button" become nested folders, which is what we want.
-          const folder = tag.split('/').map(safePath).join('/');
-          zip.file(`${folder}/${safePath(name)}`, blob);
-        }
-      } else {
-        zip.file(`_uncategorized/${safePath(name)}`, blob);
-      }
-    }
-
-    // Download files in parallel with a per-file timeout + retries, so one
-    // stalled request can't freeze the whole export (the old sequential loop did).
-    let done = 0;
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    const fileName = `refs-backup-${stamp}.zip`;
     const failed = [];
-    let cursor = 0;
-    const CONCURRENCY = 5;
+    let done = 0;
 
-    async function worker() {
-      while (cursor < files.length && !exportAborted) {
-        const f = files[cursor++];
-        let blob = null;
-        try {
-          blob = await fetchBlobWithRetry(f.name);
-        } catch (e) {
-          console.warn('Failed', f.name, e);
-          failed.push(f.name);
-        }
-        if (blob) addToZip(f.name, blob);
-        done++;
-        setExportProgress(Math.round((done / files.length) * 95), `Downloading ${done} / ${files.length}…`);
-      }
-    }
-
-    await Promise.all(Array.from({ length: CONCURRENCY }, worker));
-
-    if (exportAborted) { setExportProgress(0, 'Cancelled.'); return; }
-
-    const downloaded = files.length - failed.length;
-
-    // Full-fidelity manifest at the root — everything needed to restore.
-    const manifest = {
+    const buildManifest = () => JSON.stringify({
       exported_at: new Date().toISOString(),
       bucket: BUCKET,
       counts: {
         images_in_library: files.length,
-        downloaded,
+        downloaded: files.length - failed.length,
         failed: failed.length,
         tags: Object.keys(tagDesc).length,
         flows: Object.keys(flows).length
@@ -1895,37 +1884,89 @@ async function runExport() {
         notes: meta[f.name]?.notes || '',
         flow_id: meta[f.name]?.flow_id || null
       }))
-    };
-    zip.file('metadata.json', JSON.stringify(manifest, null, 2));
+    }, null, 2);
 
-    // Plain-text summary so you can check counts without opening the JSON.
-    const report =
-      `Refs backup — ${manifest.exported_at}\n` +
+    const buildReport = () =>
+      `Refs backup — ${new Date().toISOString()}\n` +
       `Images in library: ${files.length}\n` +
-      `Downloaded OK:     ${downloaded}\n` +
+      `Downloaded OK:     ${files.length - failed.length}\n` +
       `Failed:            ${failed.length}\n` +
       `Tags:              ${Object.keys(tagDesc).length}\n` +
       `Flows:             ${Object.keys(flows).length}\n` +
       (failed.length ? `\nFailed files:\n` + failed.map(n => '  - ' + n).join('\n') + '\n' : '');
-    zip.file('_EXPORT-REPORT.txt', report);
 
-    setExportProgress(97, 'Packaging…');
-    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
-    // STORE (no deflate): images/videos are already compressed, so this is far
-    // faster and uses much less memory — important for large libraries.
-    const content = await zip.generateAsync({ type: 'blob', compression: 'STORE' }, m => {
-      setExportProgress(97 + Math.round(m.percent * 0.03), 'Packaging…');
-    });
+    const supportsFS = typeof window.showSaveFilePicker === 'function';
 
-    const url = URL.createObjectURL(content);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `refs-backup-${stamp}.zip`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 30000);
+    // ── Preferred path: stream the zip straight to disk (no memory ceiling) ──
+    if (supportsFS) {
+      let handle;
+      try {
+        handle = await window.showSaveFilePicker({
+          suggestedName: fileName,
+          types: [{ description: 'ZIP archive', accept: { 'application/zip': ['.zip'] } }]
+        });
+      } catch (e) {
+        if (e.name === 'AbortError') { exportOverlay.classList.remove('show'); return; }
+        throw e;
+      }
+      const writable = await handle.createWritable();
 
+      // Lazily yield zip entries as files download — client-zip pulls one at a
+      // time, so only a few blobs are ever held in memory.
+      async function* entries() {
+        for await (const { file, blob, err } of prefetch(files, 5)) {
+          if (exportAborted) break;
+          if (err || !blob) {
+            console.warn('Failed', file.name, err);
+            failed.push(file.name);
+          } else {
+            const lastModified = file.created_at ? new Date(file.created_at) : new Date();
+            for (const path of zipPathsFor(file.name, meta)) {
+              yield { name: path, input: blob, lastModified };
+            }
+          }
+          done++;
+          setExportProgress(Math.round((done / files.length) * 99), `Downloading ${done} / ${files.length}…`);
+        }
+        // Metadata files last, once final counts are known.
+        yield { name: 'metadata.json', input: buildManifest() };
+        yield { name: '_EXPORT-REPORT.txt', input: buildReport() };
+      }
+
+      try {
+        await makeZip(entries()).pipeTo(writable);
+      } catch (e) {
+        try { await writable.abort(); } catch {}
+        if (exportAborted) { setExportProgress(0, 'Cancelled.'); return; }
+        throw e;
+      }
+      if (exportAborted) { setExportProgress(0, 'Cancelled.'); return; }
+    } else {
+      // ── Fallback (Safari/Firefox): build in memory with JSZip. Fine for
+      // smaller libraries; very large ones may exceed memory. ──
+      const zip = new JSZip();
+      for await (const { file, blob, err } of prefetch(files, 5)) {
+        if (exportAborted) { setExportProgress(0, 'Cancelled.'); return; }
+        if (err || !blob) { console.warn('Failed', file.name, err); failed.push(file.name); }
+        else { for (const path of zipPathsFor(file.name, meta)) zip.file(path, blob); }
+        done++;
+        setExportProgress(Math.round((done / files.length) * 95), `Downloading ${done} / ${files.length}…`);
+      }
+      zip.file('metadata.json', buildManifest());
+      zip.file('_EXPORT-REPORT.txt', buildReport());
+
+      setExportProgress(97, 'Packaging…');
+      const content = await zip.generateAsync({ type: 'blob', compression: 'STORE' },
+        m => setExportProgress(97 + Math.round(m.percent * 0.03), 'Packaging…'));
+
+      const url = URL.createObjectURL(content);
+      const a = document.createElement('a');
+      a.href = url; a.download = fileName;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+    }
+
+    const downloaded = files.length - failed.length;
     if (failed.length) {
       setExportProgress(100, `Done — ${downloaded}/${files.length} images (${failed.length} failed, see _EXPORT-REPORT.txt)`);
       exportCancel.textContent = 'Close';
