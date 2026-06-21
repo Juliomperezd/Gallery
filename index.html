@@ -1769,6 +1769,26 @@ function safePath(s) {
   return String(s).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').replace(/\s+/g, ' ').trim() || '_';
 }
 
+// Fetch a file from the public bucket with a hard timeout (so a stalled
+// connection aborts instead of hanging forever) and a couple of retries.
+async function fetchBlobWithRetry(name, { timeoutMs = 45000, retries = 2 } = {}) {
+  const { data: { publicUrl } } = supabase.storage.from(BUCKET).getPublicUrl(name);
+  for (let attempt = 0; ; attempt++) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const res = await fetch(publicUrl, { signal: ctrl.signal, cache: 'no-store' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return await res.blob();
+    } catch (e) {
+      if (attempt >= retries || exportAborted) throw e;
+      await new Promise(r => setTimeout(r, 700 * (attempt + 1)));
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+}
+
 // List every object in the bucket, paging past the 500-item limit.
 async function listAllFiles() {
   const all = [];
@@ -1812,28 +1832,44 @@ async function runExport() {
 
     const zip = new JSZip();
 
-    // Download each file and place a copy in every tag folder it belongs to.
-    let done = 0;
-    const failed = [];
-    for (const f of files) {
-      if (exportAborted) { setExportProgress(0, 'Cancelled.'); return; }
-      setExportProgress(Math.round((done / files.length) * 95), `Downloading ${done + 1} / ${files.length}…`);
-
-      const { data: blob, error } = await supabase.storage.from(BUCKET).download(f.name);
-      if (error || !blob) { console.warn('Skipped', f.name, error); failed.push(f.name); done++; continue; }
-
-      const tags = meta[f.name]?.tags || [];
+    // Place a downloaded blob into every tag folder it belongs to.
+    function addToZip(name, blob) {
+      const tags = meta[name]?.tags || [];
       if (tags.length) {
         for (const tag of tags) {
           // Subtags like "component/button" become nested folders, which is what we want.
           const folder = tag.split('/').map(safePath).join('/');
-          zip.file(`${folder}/${safePath(f.name)}`, blob);
+          zip.file(`${folder}/${safePath(name)}`, blob);
         }
       } else {
-        zip.file(`_uncategorized/${safePath(f.name)}`, blob);
+        zip.file(`_uncategorized/${safePath(name)}`, blob);
       }
-      done++;
     }
+
+    // Download files in parallel with a per-file timeout + retries, so one
+    // stalled request can't freeze the whole export (the old sequential loop did).
+    let done = 0;
+    const failed = [];
+    let cursor = 0;
+    const CONCURRENCY = 5;
+
+    async function worker() {
+      while (cursor < files.length && !exportAborted) {
+        const f = files[cursor++];
+        let blob = null;
+        try {
+          blob = await fetchBlobWithRetry(f.name);
+        } catch (e) {
+          console.warn('Failed', f.name, e);
+          failed.push(f.name);
+        }
+        if (blob) addToZip(f.name, blob);
+        done++;
+        setExportProgress(Math.round((done / files.length) * 95), `Downloading ${done} / ${files.length}…`);
+      }
+    }
+
+    await Promise.all(Array.from({ length: CONCURRENCY }, worker));
 
     if (exportAborted) { setExportProgress(0, 'Cancelled.'); return; }
 
@@ -1873,10 +1909,12 @@ async function runExport() {
       (failed.length ? `\nFailed files:\n` + failed.map(n => '  - ' + n).join('\n') + '\n' : '');
     zip.file('_EXPORT-REPORT.txt', report);
 
-    setExportProgress(97, 'Compressing…');
+    setExportProgress(97, 'Packaging…');
     const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
-    const content = await zip.generateAsync({ type: 'blob' }, m => {
-      setExportProgress(97 + Math.round(m.percent * 0.03), 'Compressing…');
+    // STORE (no deflate): images/videos are already compressed, so this is far
+    // faster and uses much less memory — important for large libraries.
+    const content = await zip.generateAsync({ type: 'blob', compression: 'STORE' }, m => {
+      setExportProgress(97 + Math.round(m.percent * 0.03), 'Packaging…');
     });
 
     const url = URL.createObjectURL(content);
