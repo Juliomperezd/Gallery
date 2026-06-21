@@ -688,8 +688,13 @@
 <script src="auth.js"></script>
 <script type="module">
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import JSZip from 'https://esm.sh/jszip@3.10.1';
-import { makeZip } from 'https://esm.sh/client-zip@2.4.5';
+import { makeZip, downloadZip } from 'https://esm.sh/client-zip@2.4.5';
+import streamSaver from 'https://esm.sh/streamsaver@2.0.6';
+
+// Stream zip writes straight to disk via a same-origin service worker, so the
+// backup never has to fit in memory. Self-hosted mitm/sw keep Brave Shields
+// (which blocks third-party service workers) happy.
+streamSaver.mitm = new URL('mitm.html?version=2.0.6', location.href).href;
 
 const supabase  = createClient(SUPABASE_URL, SUPABASE_KEY);
 const BUCKET    = 'images';
@@ -1895,71 +1900,48 @@ async function runExport() {
       `Flows:             ${Object.keys(flows).length}\n` +
       (failed.length ? `\nFailed files:\n` + failed.map(n => '  - ' + n).join('\n') + '\n' : '');
 
-    const supportsFS = typeof window.showSaveFilePicker === 'function';
-
-    // ── Preferred path: stream the zip straight to disk (no memory ceiling) ──
-    if (supportsFS) {
-      let handle;
-      try {
-        handle = await window.showSaveFilePicker({
-          suggestedName: fileName,
-          types: [{ description: 'ZIP archive', accept: { 'application/zip': ['.zip'] } }]
-        });
-      } catch (e) {
-        if (e.name === 'AbortError') { exportOverlay.classList.remove('show'); return; }
-        throw e;
-      }
-      const writable = await handle.createWritable();
-
-      // Lazily yield zip entries as files download — client-zip pulls one at a
-      // time, so only a few blobs are ever held in memory.
-      async function* entries() {
-        for await (const { file, blob, err } of prefetch(files, 5)) {
-          if (exportAborted) break;
-          if (err || !blob) {
-            console.warn('Failed', file.name, err);
-            failed.push(file.name);
-          } else {
-            const lastModified = file.created_at ? new Date(file.created_at) : new Date();
-            for (const path of zipPathsFor(file.name, meta)) {
-              yield { name: path, input: blob, lastModified };
-            }
+    // Lazily yield zip entries as files download (5-ahead prefetch), one at a
+    // time, so only a few blobs are ever held in memory regardless of total size.
+    async function* entries() {
+      for await (const { file, blob, err } of prefetch(files, 5)) {
+        if (exportAborted) break;
+        if (err || !blob) {
+          console.warn('Failed', file.name, err);
+          failed.push(file.name);
+        } else {
+          const lastModified = file.created_at ? new Date(file.created_at) : new Date();
+          for (const path of zipPathsFor(file.name, meta)) {
+            yield { name: path, input: blob, lastModified };
           }
-          done++;
-          setExportProgress(Math.round((done / files.length) * 99), `Downloading ${done} / ${files.length}…`);
         }
-        // Metadata files last, once final counts are known.
-        yield { name: 'metadata.json', input: buildManifest() };
-        yield { name: '_EXPORT-REPORT.txt', input: buildReport() };
+        done++;
+        setExportProgress(Math.round((done / files.length) * 99), `Downloading ${done} / ${files.length}…`);
       }
+      // Metadata files last, once final counts are known.
+      yield { name: 'metadata.json', input: buildManifest() };
+      yield { name: '_EXPORT-REPORT.txt', input: buildReport() };
+    }
 
+    const canStream = 'serviceWorker' in navigator && window.isSecureContext;
+
+    if (canStream) {
+      // ── Stream the zip to disk via the service worker — no memory ceiling. ──
+      const writeStream = streamSaver.createWriteStream(fileName);
       try {
-        await makeZip(entries()).pipeTo(writable);
+        await makeZip(entries()).pipeTo(writeStream);
       } catch (e) {
-        try { await writable.abort(); } catch {}
+        try { await writeStream.abort(); } catch {}
         if (exportAborted) { setExportProgress(0, 'Cancelled.'); return; }
         throw e;
       }
       if (exportAborted) { setExportProgress(0, 'Cancelled.'); return; }
     } else {
-      // ── Fallback (Safari/Firefox): build in memory with JSZip. Fine for
-      // smaller libraries; very large ones may exceed memory. ──
-      const zip = new JSZip();
-      for await (const { file, blob, err } of prefetch(files, 5)) {
-        if (exportAborted) { setExportProgress(0, 'Cancelled.'); return; }
-        if (err || !blob) { console.warn('Failed', file.name, err); failed.push(file.name); }
-        else { for (const path of zipPathsFor(file.name, meta)) zip.file(path, blob); }
-        done++;
-        setExportProgress(Math.round((done / files.length) * 95), `Downloading ${done} / ${files.length}…`);
-      }
-      zip.file('metadata.json', buildManifest());
-      zip.file('_EXPORT-REPORT.txt', buildReport());
-
-      setExportProgress(97, 'Packaging…');
-      const content = await zip.generateAsync({ type: 'blob', compression: 'STORE' },
-        m => setExportProgress(97 + Math.round(m.percent * 0.03), 'Packaging…'));
-
-      const url = URL.createObjectURL(content);
+      // ── Last-resort fallback: build the whole zip blob in memory. client-zip
+      // is far lighter than JSZip, but very large libraries may still exceed RAM. ──
+      const blob = await downloadZip(entries()).blob();
+      if (exportAborted) { setExportProgress(0, 'Cancelled.'); return; }
+      setExportProgress(99, 'Saving…');
+      const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url; a.download = fileName;
       document.body.appendChild(a); a.click(); a.remove();
