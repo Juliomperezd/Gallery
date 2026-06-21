@@ -13,6 +13,7 @@ Galería compartida de imágenes y vídeos de referencia para 4 personas (con PI
 ```
 /Desktop/Gallery/
   index.html    ← galería masonry (10 cols) + lightbox + filtros + notas + modal de upload
+  links.html    ← página de links (URL + título + descripción + categorías), filtros por categoría, CRUD
   upload.html   ← página standalone (mantenida para compatibilidad, no es el flujo principal)
   config.js     ← credenciales Supabase + PIN (ya rellenas)
   auth.js       ← overlay de PIN (usa GALLERY_PIN de config.js)
@@ -25,6 +26,7 @@ Galería compartida de imágenes y vídeos de referencia para 4 personas (con PI
 - Tabla: `image_meta` (filename TEXT PK, tags TEXT[], notes TEXT, flow_id TEXT)
 - Tabla: `tag_meta` (tag TEXT PK, description TEXT)
 - Tabla: `flows` (id TEXT PK, name TEXT, created_at TIMESTAMPTZ)
+- Tabla: `links` (id BIGINT PK identity, url TEXT, title TEXT, description TEXT, categories TEXT[], created_at TIMESTAMPTZ)
 
 ### SQL ejecutado
 ```sql
@@ -57,6 +59,21 @@ CREATE POLICY "public read"   ON flows FOR SELECT USING (true);
 CREATE POLICY "public insert" ON flows FOR INSERT WITH CHECK (true);
 CREATE POLICY "public update" ON flows FOR UPDATE USING (true);
 CREATE POLICY "public delete" ON flows FOR DELETE USING (true);
+
+-- links table
+CREATE TABLE IF NOT EXISTS links (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  url TEXT NOT NULL,
+  title TEXT DEFAULT '',
+  description TEXT DEFAULT '',
+  categories TEXT[] DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE links ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "public read"   ON links FOR SELECT USING (true);
+CREATE POLICY "public insert" ON links FOR INSERT WITH CHECK (true);
+CREATE POLICY "public update" ON links FOR UPDATE USING (true);
+CREATE POLICY "public delete" ON links FOR DELETE USING (true);
 ```
 
 ## Features implementadas
@@ -77,6 +94,7 @@ CREATE POLICY "public delete" ON flows FOR DELETE USING (true);
 - [x] Flow card: badge de conteo arriba a la derecha + tira de miniaturas (11px) en la parte inferior con degradado oscuro
 - [x] Tag description panel: muestra el nombre del tag como título encima de la descripción al filtrar
 - [x] Tags Manager: botón "rename" por tag para renombrar globalmente (además del ✎ de descripción)
+- [x] Links: página `links.html` con tarjetas (URL + título + descripción + categorías), filtros por categoría (multi-categoría tipo tags), CRUD vía drawer derecho. Categorías por defecto: Design systems, Components, Portfolios. Botón "Links" en el header de la galería + botón "← Gallery" para volver
 - [x] PIN de acceso (auth.js)
 - [x] Desplegado en GitHub Pages
 

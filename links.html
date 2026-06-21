@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Refs · Links</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0d0d0d;
+    color: #ccc;
+    font-family: 'Inter', 'Helvetica Neue', sans-serif;
+    min-height: 100vh;
+  }
+
+  header {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 24px;
+    background: rgba(13,13,13,0.95);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid #1e1e1e;
+  }
+  #header-left { display: flex; align-items: center; gap: 14px; }
+  header h1 { font-size: 13px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: #ccc; }
+  #header-actions { display: flex; align-items: center; gap: 8px; }
+  .btn {
+    font-size: 12px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase;
+    color: #fff; text-decoration: none; padding: 6px 14px; border: 1px solid #555; border-radius: 4px;
+    transition: border-color 0.15s; background: none; cursor: pointer; font-family: inherit;
+  }
+  .btn:hover { border-color: #aaa; }
+  #back-btn { display: flex; align-items: center; gap: 6px; color: #888; border-color: #333; }
+  #back-btn:hover { color: #fff; border-color: #666; }
+
+  /* Filter bar */
+  #filter-bar {
+    position: sticky; top: 57px; z-index: 9;
+    display: flex; gap: 8px; flex-wrap: wrap;
+    padding: 12px 24px;
+    background: rgba(13,13,13,0.95);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid #1e1e1e;
+  }
+  .filter-btn {
+    font-size: 12px; letter-spacing: 0.04em; color: #999;
+    padding: 6px 14px; border: 1px solid #3a3a3a; border-radius: 20px;
+    background: none; cursor: pointer; font-family: inherit;
+    transition: border-color 0.12s, color 0.12s, background 0.12s; white-space: nowrap;
+  }
+  .filter-btn:hover { border-color: #666; color: #e0e0e0; }
+  .filter-btn.active { background: #fff; color: #0d0d0d; border-color: #fff; }
+  .filter-btn .count { opacity: 0.5; margin-left: 6px; font-size: 11px; }
+
+  /* Links grid */
+  #links-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 14px; padding: 24px;
+  }
+  #status { padding: 60px 24px; text-align: center; color: #666; font-size: 13px; letter-spacing: 0.04em; }
+
+  .link-card {
+    position: relative;
+    border: 1px solid #1e1e1e; border-radius: 8px; background: #111;
+    padding: 18px 18px 16px; display: flex; flex-direction: column; gap: 10px;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .link-card:hover { border-color: #3a3a3a; background: #141414; }
+  .lc-title { font-size: 14px; font-weight: 500; color: #fff; letter-spacing: 0.01em; line-height: 1.35; word-break: break-word; }
+  .lc-title a { color: inherit; text-decoration: none; }
+  .lc-title a:hover { text-decoration: underline; }
+  .lc-url { font-size: 11px; color: #6a8caa; letter-spacing: 0.02em; word-break: break-all; text-decoration: none; }
+  .lc-url:hover { color: #8fb4d6; }
+  .lc-desc { font-size: 12px; color: #999; line-height: 1.5; word-break: break-word; }
+  .lc-cats { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 2px; }
+  .lc-cat {
+    font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: #aaa;
+    padding: 3px 9px; border: 1px solid #2e2e2e; border-radius: 20px; background: #1a1a1a;
+    cursor: pointer; transition: border-color 0.12s, color 0.12s;
+  }
+  .lc-cat:hover { border-color: #666; color: #fff; }
+  .lc-actions { position: absolute; top: 12px; right: 12px; display: flex; gap: 4px; opacity: 0; transition: opacity 0.15s; }
+  .link-card:hover .lc-actions { opacity: 1; }
+  .lc-act {
+    background: rgba(13,13,13,0.8); border: 1px solid #2e2e2e; border-radius: 4px;
+    color: #999; font-size: 12px; cursor: pointer; padding: 3px 7px; line-height: 1; font-family: inherit;
+    transition: color 0.12s, border-color 0.12s;
+  }
+  .lc-act:hover { color: #fff; border-color: #666; }
+
+  /* Add / edit drawer */
+  #link-modal { border: none; background: transparent; padding: 0; max-width: 100vw; max-height: 100vh; width: 100vw; height: 100vh; outline: none; }
+  #link-modal::backdrop { background: rgba(0,0,0,0.65); cursor: pointer; }
+  #lm-wrap {
+    position: absolute; top: 0; right: 0; bottom: 0; width: 460px; max-width: 100vw;
+    background: #0d0d0d; border-left: 1px solid #1e1e1e; display: flex; flex-direction: column; overflow: hidden;
+  }
+  #lm-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; border-bottom: 1px solid #1e1e1e; flex-shrink: 0; }
+  #lm-header span { font-size: 13px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: #ccc; }
+  #lm-close { background: none; border: none; color: #888; font-size: 24px; cursor: pointer; line-height: 1; padding: 0; transition: color 0.15s; }
+  #lm-close:hover { color: #fff; }
+  #lm-body { flex: 1; overflow-y: auto; padding: 28px 24px; display: flex; flex-direction: column; gap: 22px; scrollbar-width: thin; scrollbar-color: #2a2a2a transparent; }
+  #lm-body::-webkit-scrollbar { width: 4px; }
+  #lm-body::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 2px; }
+
+  .field label { display: block; font-size: 11px; color: #999; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 10px; }
+  .field input[type=text], .field input[type=url], .field textarea {
+    width: 100%; background: #111; border: 1px solid #1e1e1e; border-radius: 4px;
+    color: #ccc; font-size: 13px; padding: 9px 11px; outline: none; font-family: inherit; resize: vertical;
+  }
+  .field input:focus, .field textarea:focus { border-color: #555; }
+  .field input::placeholder, .field textarea::placeholder { color: #666; }
+  .field textarea { min-height: 70px; line-height: 1.5; }
+
+  #lm-cat-suggestions { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .cat-suggestion {
+    padding: 5px 11px; background: none; border: 1px solid #3a3a3a; border-radius: 20px;
+    font-size: 12px; color: #999; cursor: pointer; font-family: inherit; letter-spacing: 0.02em;
+    transition: border-color 0.12s, color 0.12s, background 0.12s;
+  }
+  .cat-suggestion:hover { border-color: #666; color: #e0e0e0; }
+  .cat-suggestion.active { border-color: #aaa; color: #fff; background: #1a1a1a; }
+
+  #lm-footer { padding: 16px 24px; border-top: 1px solid #1e1e1e; flex-shrink: 0; display: flex; gap: 10px; }
+  #lm-save { flex: 1; padding: 11px; background: #fff; color: #0d0d0d; border: none; border-radius: 4px; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; font-family: inherit; transition: opacity 0.15s; }
+  #lm-save:hover { opacity: 0.85; }
+  #lm-save:disabled { opacity: 0.4; cursor: default; }
+</style>
+</head>
+<body>
+
+<header>
+  <div id="header-left">
+    <a href="index.html" id="back-btn" class="btn">← Gallery</a>
+    <h1>Links</h1>
+  </div>
+  <div id="header-actions">
+    <button id="add-link-btn" class="btn">+ Add link</button>
+  </div>
+</header>
+
+<div id="filter-bar"></div>
+<div id="status">Loading…</div>
+<div id="links-grid"></div>
+
+<!-- Add / edit drawer -->
+<dialog id="link-modal">
+  <div id="lm-wrap">
+    <div id="lm-header">
+      <span id="lm-title">Add link</span>
+      <button id="lm-close">&times;</button>
+    </div>
+    <div id="lm-body">
+      <div class="field">
+        <label>URL</label>
+        <input id="lm-url" type="url" placeholder="https://…" autocomplete="off">
+      </div>
+      <div class="field">
+        <label>Title</label>
+        <input id="lm-name" type="text" placeholder="Name of the link" autocomplete="off">
+      </div>
+      <div class="field">
+        <label>Description</label>
+        <textarea id="lm-desc" placeholder="Optional notes…"></textarea>
+      </div>
+      <div class="field">
+        <label>Categories</label>
+        <div id="lm-cat-suggestions"></div>
+        <input id="lm-cat-input" type="text" placeholder="Add a new category + Enter" autocomplete="off">
+      </div>
+    </div>
+    <div id="lm-footer">
+      <button id="lm-save">Save</button>
+    </div>
+  </div>
+</dialog>
+
+<script src="config.js"></script>
+<script src="auth.js"></script>
+<script type="module">
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const DEFAULT_CATS = ['Design systems', 'Components', 'Portfolios'];
+
+const grid       = document.getElementById('links-grid');
+const filterBar  = document.getElementById('filter-bar');
+const status      = document.getElementById('status');
+
+const modal      = document.getElementById('link-modal');
+const mTitle     = document.getElementById('lm-title');
+const inUrl      = document.getElementById('lm-url');
+const inName     = document.getElementById('lm-name');
+const inDesc     = document.getElementById('lm-desc');
+const catSugg    = document.getElementById('lm-cat-suggestions');
+const catInput   = document.getElementById('lm-cat-input');
+const saveBtn    = document.getElementById('lm-save');
+
+let links       = [];      // [{id, url, title, description, categories}]
+let activeFilter = null;   // category string or null
+let editingId   = null;    // id when editing, null when adding
+let formCats    = [];      // categories selected in the form
+
+/* ---------- Load ---------- */
+async function load() {
+  status.style.display = 'block';
+  status.textContent = 'Loading…';
+  const { data, error } = await supabase
+    .from('links')
+    .select('id, url, title, description, categories')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    status.textContent = 'Error loading links: ' + error.message;
+    return;
+  }
+  links = (data || []).map(l => ({ ...l, categories: l.categories || [] }));
+  status.style.display = links.length ? 'none' : 'block';
+  if (!links.length) status.textContent = 'No links yet. Add one!';
+  renderFilters();
+  renderLinks();
+}
+
+/* ---------- Categories present ---------- */
+function allCategories() {
+  const set = new Set(DEFAULT_CATS);
+  links.forEach(l => l.categories.forEach(c => set.add(c)));
+  return [...set];
+}
+
+/* ---------- Filter bar ---------- */
+function renderFilters() {
+  filterBar.innerHTML = '';
+  const cats = allCategories();
+
+  const allBtn = mkFilter('All', null, links.length);
+  filterBar.appendChild(allBtn);
+
+  for (const cat of cats) {
+    const count = links.filter(l => l.categories.includes(cat)).length;
+    filterBar.appendChild(mkFilter(cat, cat, count));
+  }
+}
+
+function mkFilter(label, value, count) {
+  const btn = document.createElement('button');
+  btn.className = 'filter-btn' + (activeFilter === value ? ' active' : '');
+  btn.innerHTML = label + '<span class="count">' + count + '</span>';
+  btn.addEventListener('click', () => {
+    activeFilter = value;
+    renderFilters();
+    renderLinks();
+  });
+  return btn;
+}
+
+/* ---------- Links grid ---------- */
+function renderLinks() {
+  grid.innerHTML = '';
+  const visible = activeFilter
+    ? links.filter(l => l.categories.includes(activeFilter))
+    : links;
+
+  if (!visible.length) {
+    status.style.display = 'block';
+    status.textContent = activeFilter ? 'No links in "' + activeFilter + '".' : 'No links yet. Add one!';
+    return;
+  }
+  status.style.display = 'none';
+
+  for (const link of visible) {
+    grid.appendChild(mkCard(link));
+  }
+}
+
+function mkCard(link) {
+  const card = document.createElement('div');
+  card.className = 'link-card';
+
+  const safeUrl = link.url || '#';
+  const host = hostOf(link.url);
+
+  card.innerHTML =
+    '<div class="lc-actions">' +
+      '<button class="lc-act" data-act="edit" title="Edit">✏</button>' +
+      '<button class="lc-act" data-act="del" title="Delete">🗑</button>' +
+    '</div>' +
+    '<div class="lc-title"><a href="' + esc(safeUrl) + '" target="_blank" rel="noopener">' +
+      esc(link.title || host || link.url) + '</a></div>' +
+    '<a class="lc-url" href="' + esc(safeUrl) + '" target="_blank" rel="noopener">' + esc(host || link.url) + '</a>' +
+    (link.description ? '<div class="lc-desc">' + esc(link.description) + '</div>' : '') +
+    '<div class="lc-cats">' +
+      link.categories.map(c => '<span class="lc-cat" data-cat="' + esc(c) + '">' + esc(c) + '</span>').join('') +
+    '</div>';
+
+  card.querySelector('[data-act=edit]').addEventListener('click', () => openModal(link));
+  card.querySelector('[data-act=del]').addEventListener('click', () => removeLink(link));
+  card.querySelectorAll('.lc-cat').forEach(el =>
+    el.addEventListener('click', () => { activeFilter = el.dataset.cat; renderFilters(); renderLinks(); window.scrollTo({ top: 0, behavior: 'smooth' }); })
+  );
+  return card;
+}
+
+/* ---------- Add / edit drawer ---------- */
+function openModal(link) {
+  editingId = link ? link.id : null;
+  mTitle.textContent = link ? 'Edit link' : 'Add link';
+  inUrl.value  = link ? (link.url || '') : '';
+  inName.value = link ? (link.title || '') : '';
+  inDesc.value = link ? (link.description || '') : '';
+  formCats     = link ? [...link.categories] : [];
+  renderCatSuggestions();
+  modal.showModal();
+  setTimeout(() => inUrl.focus(), 50);
+}
+
+function renderCatSuggestions() {
+  catSugg.innerHTML = '';
+  const cats = [...new Set([...allCategories(), ...formCats])];
+  for (const cat of cats) {
+    const btn = document.createElement('button');
+    btn.className = 'cat-suggestion' + (formCats.includes(cat) ? ' active' : '');
+    btn.textContent = cat;
+    btn.addEventListener('click', () => {
+      formCats.includes(cat)
+        ? (formCats = formCats.filter(c => c !== cat))
+        : formCats.push(cat);
+      renderCatSuggestions();
+    });
+    catSugg.appendChild(btn);
+  }
+}
+
+catInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const v = catInput.value.trim();
+    if (v && !formCats.includes(v)) formCats.push(v);
+    catInput.value = '';
+    renderCatSuggestions();
+  }
+});
+
+async function saveLink() {
+  let url = inUrl.value.trim();
+  if (!url) { inUrl.focus(); return; }
+  if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+
+  const row = {
+    url,
+    title: inName.value.trim(),
+    description: inDesc.value.trim(),
+    categories: formCats
+  };
+
+  saveBtn.disabled = true;
+  saveBtn.textContent = 'Saving…';
+
+  let error;
+  if (editingId != null) {
+    ({ error } = await supabase.from('links').update(row).eq('id', editingId));
+  } else {
+    ({ error } = await supabase.from('links').insert(row));
+  }
+
+  saveBtn.disabled = false;
+  saveBtn.textContent = 'Save';
+
+  if (error) { alert('Error saving: ' + error.message); return; }
+  modal.close();
+  await load();
+}
+
+async function removeLink(link) {
+  if (!confirm('Delete "' + (link.title || link.url) + '"?')) return;
+  const { error } = await supabase.from('links').delete().eq('id', link.id);
+  if (error) { alert('Error deleting: ' + error.message); return; }
+  await load();
+}
+
+/* ---------- Helpers ---------- */
+function hostOf(url) {
+  try { return new URL(/^https?:\/\//i.test(url) ? url : 'https://' + url).hostname.replace(/^www\./, ''); }
+  catch { return ''; }
+}
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+
+/* ---------- Wire up ---------- */
+document.getElementById('add-link-btn').addEventListener('click', () => openModal(null));
+document.getElementById('lm-close').addEventListener('click', () => modal.close());
+saveBtn.addEventListener('click', saveLink);
+modal.addEventListener('click', e => { if (e.target === modal) modal.close(); });
+
+load();
+</script>
+</body>
+</html>
