@@ -94,6 +94,7 @@ CREATE POLICY "public delete" ON links FOR DELETE USING (true);
 - [x] Flow card: badge de conteo arriba a la derecha + tira de miniaturas (11px) en la parte inferior con degradado oscuro
 - [x] Tag description panel: muestra el nombre del tag como título encima de la descripción al filtrar
 - [x] Tags Manager: botón "rename" por tag para renombrar globalmente (además del ✎ de descripción)
+- [x] Export: botón "Export" en el header descarga un backup ZIP de toda la librería. Usa JSZip (CDN esm.sh). Estructura: una carpeta por tag (subtags `a/b` → carpetas anidadas) con copia de cada imagen en cada tag que tenga, carpeta `_uncategorized` para las sin tags, y `metadata.json` en la raíz con tags/notas/flows/descripciones para restaurar. Overlay de progreso con cancelar. Pagina el storage list (>500 items)
 - [x] Links: página `links.html` con tarjetas (URL + título + descripción + categorías), filtros por categoría (multi-categoría tipo tags), CRUD vía drawer derecho. Categorías por defecto: Design systems, Components, Portfolios. Botón "Links" en el header de la galería + botón "← Gallery" para volver
 - [x] PIN de acceso (auth.js)
 - [x] Desplegado en GitHub Pages

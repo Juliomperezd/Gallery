@@ -28,12 +28,28 @@
   }
   header h1 { font-size: 13px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: #ccc; }
   #header-actions { display: flex; align-items: center; gap: 8px; }
-  header a, #tags-manager-btn, #open-upload-btn {
+  header a, #export-btn, #tags-manager-btn, #open-upload-btn {
     font-size: 12px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase;
     color: #fff; text-decoration: none; padding: 6px 14px; border: 1px solid #555; border-radius: 4px;
     transition: border-color 0.15s; background: none; cursor: pointer; font-family: inherit;
   }
-  header a:hover, #tags-manager-btn:hover, #open-upload-btn:hover { border-color: #aaa; }
+  header a:hover, #export-btn:hover, #tags-manager-btn:hover, #open-upload-btn:hover { border-color: #aaa; }
+  #export-btn:disabled { opacity: 0.5; cursor: default; border-color: #333; }
+
+  /* Export progress overlay */
+  #export-overlay {
+    position: fixed; inset: 0; z-index: 9998;
+    background: rgba(13,13,13,0.92); backdrop-filter: blur(6px);
+    display: none; align-items: center; justify-content: center;
+  }
+  #export-overlay.show { display: flex; }
+  #export-box { width: 340px; display: flex; flex-direction: column; gap: 16px; text-align: center; }
+  #export-box h2 { font-size: 13px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: #ccc; }
+  #export-bar-track { width: 100%; height: 4px; background: #222; border-radius: 2px; overflow: hidden; }
+  #export-bar { height: 100%; width: 0%; background: #fff; transition: width 0.2s; }
+  #export-msg { font-size: 12px; color: #888; letter-spacing: 0.03em; }
+  #export-cancel { margin-top: 4px; align-self: center; background: none; border: 1px solid #333; color: #888; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; padding: 6px 14px; border-radius: 4px; cursor: pointer; font-family: inherit; transition: color 0.15s, border-color 0.15s; }
+  #export-cancel:hover { color: #fff; border-color: #666; }
 
   /* Upload modal */
   #upload-modal {
@@ -547,10 +563,20 @@
   <h1>Refs</h1>
   <div id="header-actions">
     <a href="links.html" id="links-btn">Links</a>
+    <button id="export-btn">Export</button>
     <button id="tags-manager-btn">Tags</button>
     <button id="open-upload-btn">+ Upload</button>
   </div>
 </header>
+
+<div id="export-overlay">
+  <div id="export-box">
+    <h2>Exporting backup</h2>
+    <div id="export-bar-track"><div id="export-bar"></div></div>
+    <div id="export-msg">Preparing…</div>
+    <button id="export-cancel">Cancel</button>
+  </div>
+</div>
 
 <div id="filter-bar"></div>
 <div id="subtag-bar"></div>
@@ -662,6 +688,7 @@
 <script src="auth.js"></script>
 <script type="module">
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import JSZip from 'https://esm.sh/jszip@3.10.1';
 
 const supabase  = createClient(SUPABASE_URL, SUPABASE_KEY);
 const BUCKET    = 'images';
@@ -1721,6 +1748,137 @@ document.getElementById('open-upload-btn').addEventListener('click', () => openU
 document.getElementById('um-close').addEventListener('click', () => uploadModal.close());
 uploadModal.addEventListener('click', e => { if (e.target === uploadModal) uploadModal.close(); });
 uploadModal.addEventListener('close', () => { if (umDidUpload) load(); });
+
+// ── Export backup ───────────────────────────────────────────────────────────
+
+const exportBtn     = document.getElementById('export-btn');
+const exportOverlay = document.getElementById('export-overlay');
+const exportBar     = document.getElementById('export-bar');
+const exportMsg     = document.getElementById('export-msg');
+const exportCancel  = document.getElementById('export-cancel');
+
+let exportAborted = false;
+
+function setExportProgress(pct, msg) {
+  exportBar.style.width = pct + '%';
+  if (msg != null) exportMsg.textContent = msg;
+}
+
+// Sanitize a tag or filename for use as a folder/file name inside the zip.
+function safePath(s) {
+  return String(s).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').replace(/\s+/g, ' ').trim() || '_';
+}
+
+// List every object in the bucket, paging past the 500-item limit.
+async function listAllFiles() {
+  const all = [];
+  const pageSize = 500;
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await supabase.storage.from(BUCKET)
+      .list('', { limit: pageSize, offset, sortBy: { column: 'created_at', order: 'desc' } });
+    if (error) throw error;
+    if (!data || !data.length) break;
+    all.push(...data);
+    if (data.length < pageSize) break;
+  }
+  return all.filter(f => /\.(png|jpe?g|gif|webp|avif|svg|mp4|webm|mov|m4v|ogv)$/i.test(f.name));
+}
+
+async function runExport() {
+  exportAborted = false;
+  exportBtn.disabled = true;
+  exportOverlay.classList.add('show');
+  setExportProgress(0, 'Reading library…');
+
+  try {
+    const [files, metaRes, tagDescRes, flowsRes] = await Promise.all([
+      listAllFiles(),
+      supabase.from('image_meta').select('filename, tags, notes, flow_id'),
+      supabase.from('tag_meta').select('tag, description'),
+      supabase.from('flows').select('id, name, created_at')
+    ]);
+
+    if (!files.length) { alert('No images to export.'); return; }
+
+    const meta = {};
+    for (const r of (metaRes.data || [])) {
+      meta[r.filename] = { tags: r.tags || [], notes: r.notes || '', flow_id: r.flow_id || null };
+    }
+    const tagDesc = {};
+    for (const r of (tagDescRes.data || [])) tagDesc[r.tag] = r.description || '';
+    const flows = {};
+    for (const r of (flowsRes.data || [])) flows[r.id] = { name: r.name || '', created_at: r.created_at || null };
+
+    const zip = new JSZip();
+
+    // Full-fidelity manifest at the root — everything needed to restore.
+    const manifest = {
+      exported_at: new Date().toISOString(),
+      bucket: BUCKET,
+      counts: { images: files.length, tags: Object.keys(tagDesc).length, flows: Object.keys(flows).length },
+      tag_descriptions: tagDesc,
+      flows,
+      images: files.map(f => ({
+        filename: f.name,
+        tags: meta[f.name]?.tags || [],
+        notes: meta[f.name]?.notes || '',
+        flow_id: meta[f.name]?.flow_id || null
+      }))
+    };
+    zip.file('metadata.json', JSON.stringify(manifest, null, 2));
+
+    // Download each file and place a copy in every tag folder it belongs to.
+    let done = 0;
+    for (const f of files) {
+      if (exportAborted) { setExportProgress(0, 'Cancelled.'); return; }
+      setExportProgress(Math.round((done / files.length) * 95), `Downloading ${done + 1} / ${files.length}…`);
+
+      const { data: blob, error } = await supabase.storage.from(BUCKET).download(f.name);
+      if (error || !blob) { console.warn('Skipped', f.name, error); done++; continue; }
+
+      const tags = meta[f.name]?.tags || [];
+      if (tags.length) {
+        for (const tag of tags) {
+          // Subtags like "component/button" become nested folders, which is what we want.
+          const folder = tag.split('/').map(safePath).join('/');
+          zip.file(`${folder}/${safePath(f.name)}`, blob);
+        }
+      } else {
+        zip.file(`_uncategorized/${safePath(f.name)}`, blob);
+      }
+      done++;
+    }
+
+    if (exportAborted) { setExportProgress(0, 'Cancelled.'); return; }
+
+    setExportProgress(97, 'Compressing…');
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    const content = await zip.generateAsync({ type: 'blob' }, m => {
+      setExportProgress(97 + Math.round(m.percent * 0.03), 'Compressing…');
+    });
+
+    const url = URL.createObjectURL(content);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `refs-backup-${stamp}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+
+    setExportProgress(100, 'Done ✓');
+    setTimeout(() => exportOverlay.classList.remove('show'), 900);
+  } catch (err) {
+    console.error(err);
+    alert('Export failed: ' + (err.message || err));
+    exportOverlay.classList.remove('show');
+  } finally {
+    exportBtn.disabled = false;
+  }
+}
+
+exportBtn.addEventListener('click', runExport);
+exportCancel.addEventListener('click', () => { exportAborted = true; exportOverlay.classList.remove('show'); });
 </script>
 </body>
 </html>
