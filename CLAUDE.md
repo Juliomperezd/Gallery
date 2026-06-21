@@ -25,6 +25,9 @@ Galería compartida de imágenes y vídeos de referencia para 4 personas (con PI
 ## Supabase — proyecto "Julio Gallery"
 - URL: `https://kqupemycgbpzzkzrsxtw.supabase.co`
 - Bucket: `images` (público)
+
+> ⚠️ **Paginación obligatoria (la librería ya pasa de 1000 imágenes).** PostgREST corta los `select` a 1000 filas por defecto y `storage.list()` a 1000 por petición. Cualquier query sobre `image_meta` (o `tag_meta` cuando crezca) DEBE paginar con `.range()`, si no se pierden las filas más nuevas. En `load()` se usan los helpers `listAllImages()` y `fetchAllImageMeta()`. Síntoma clásico si se olvida: "los tags de las imágenes nuevas no se guardan" (sí se guardan, pero no se cargan).
+
 - Tabla: `image_meta` (filename TEXT PK, tags TEXT[], notes TEXT, flow_id TEXT)
 - Tabla: `tag_meta` (tag TEXT PK, description TEXT)
 - Tabla: `flows` (id TEXT PK, name TEXT, created_at TIMESTAMPTZ)
