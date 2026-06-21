@@ -725,6 +725,39 @@ let editTags      = [];
 
 // ── Load ─────────────────────────────────────────────────────────────────────
 
+// Storage list y PostgREST cortan a 500/1000 filas por petición. Paginamos para
+// traer SIEMPRE la librería completa, si no las imágenes/tags más nuevos se pierden.
+async function listAllImages() {
+  const all = [];
+  const pageSize = 1000;
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await supabase.storage.from(BUCKET).list('', {
+      limit: pageSize, offset,
+      sortBy: { column: 'created_at', order: 'desc' }
+    });
+    if (error) return { data: all, error };
+    all.push(...data);
+    if (data.length < pageSize) break;
+  }
+  return { data: all, error: null };
+}
+
+async function fetchAllImageMeta() {
+  const all = [];
+  const pageSize = 1000;
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase
+      .from('image_meta')
+      .select('filename, tags, notes, flow_id')
+      .order('filename', { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) return { data: all, error };
+    all.push(...data);
+    if (data.length < pageSize) break;
+  }
+  return { data: all, error: null };
+}
+
 async function load() {
   grid.innerHTML = '';
   thumbRegistry = [];
@@ -733,8 +766,8 @@ async function load() {
   status.textContent = 'Loading…'; status.style.display = '';
 
   const [storageRes, metaRes, tagDescRes, flowsRes] = await Promise.all([
-    supabase.storage.from(BUCKET).list('', { limit: 500, sortBy: { column: 'created_at', order: 'desc' } }),
-    supabase.from('image_meta').select('filename, tags, notes, flow_id'),
+    listAllImages(),
+    fetchAllImageMeta(),
     supabase.from('tag_meta').select('tag, description'),
     supabase.from('flows').select('id, name')
   ]);
