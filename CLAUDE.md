@@ -103,9 +103,26 @@ CREATE POLICY "public delete" ON links FOR DELETE USING (true);
 - [x] Links: página `links.html` con tarjetas (URL + título + descripción + categorías), filtros por categoría (multi-categoría tipo tags), CRUD vía drawer derecho. Categorías por defecto: Design systems, Components, Portfolios. Botón "Links" en el header de la galería + botón "← Gallery" para volver
 - [x] PIN de acceso (auth.js)
 - [x] Desplegado en GitHub Pages
+- [x] Lazy loading del grid (ver sección "Egress" abajo)
+
+## Egress de Supabase — lazy loading
+
+La librería son ~1055 archivos / ~536 MB, y el plan free de Supabase da ~5 GB de egress al mes. Cargar la galería entera de una vez se comía ~½ GB por visita: la cuota moría en ~9 cargas entre 4 personas.
+
+> ⚠️ **`loading="lazy"` nativo NO funciona en este grid.** Las tarjetas sin cargar miden 0px de alto, así que `#grid { columns: 10 }` las apila TODAS dentro del primer viewport y el navegador se las descarga enteras creyendo que están visibles. El atributo está ahí y parece que hace algo, pero no se activa nunca. **Cualquier tarjeta debe reservar altura (`.thumb.pending`) antes de tener imagen**, si no se vuelve al punto de partida sin ningún síntoma visible más allá de la factura.
+
+Cómo funciona ahora (`index.html`, sección "Thumb"):
+- El media se crea **sin `src`** (la URL va en `data-src`) y lo hidrata `cardObserver` (IntersectionObserver) al acercarse a `HYDRATE_MARGIN` = 600px del viewport. Ojo: con 10 columnas cada "fila" son 10 archivos, así que subir ese margen multiplica el gasto muy rápido.
+- `.thumb.pending` reserva altura con `aspect-ratio`. **No se quita al hidratar, sino al cargar** el media — si se quita antes, la tarjeta colapsa a 0px otra vez.
+- Caché de proporciones en `localStorage` (`gallery-ratios-v1`): Supabase no expone width/height, así que se memoriza el aspect ratio real de cada archivo la primera vez que se ve. Sin esto el grid multicolumna rebalancea al cargar cada imagen y las tarjetas saltan de columna mientras scrolleas.
+- Vídeos a `preload="none"`. Las miniaturas de 11px de los flow cards **no** autoreproducen (se bajaban el vídeo entero para pintarlo a 11px).
+- Las slides del flow lightbox tienen su propio observer (`slideObserver`, `root: flowTrack`).
+
+Medido con Chromium sobre la librería real: **993 archivos / 522 MB → 176 / 83 MB** por visita.
 
 ## Pendiente
 - [ ] Crear iOS Shortcut "Add to Refs" (ver instrucciones abajo)
+- [ ] **Miniaturas.** El grid sigue sirviendo el original (508 KB de media, uno pesa 8 MB) para pintarlo en una columna de ~157px. Es el grueso de los 83 MB que quedan. Generando thumbs WebP al subir (canvas en cliente; la transformación de imágenes de Supabase es de plan Pro) y usando el original solo en el lightbox, bajaría a ~5 MB por visita. Requiere backfill de los ~1055 archivos ya subidos.
 
 ## iOS Shortcut "Add to Refs"
 Aparece en el Share Sheet de Fotos. Sube directo al bucket de Supabase.
