@@ -215,6 +215,10 @@
   .thumb video { width: 100%; height: auto; display: block; transition: transform 0.35s ease; }
   .thumb:hover video { transform: scale(1.03); }
 
+  /* Sin esta altura reservada las tarjetas aún sin cargar miden 0px, el grid las
+     apila todas dentro del viewport y el navegador descarga la librería entera. */
+  .thumb.pending { aspect-ratio: 3 / 4; background: #141414; }
+
   /* Lightbox */
   #lightbox {
     border: none; background: transparent; padding: 0;
@@ -529,6 +533,7 @@
   .flow-slide {
     flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 10px;
   }
+  .flow-slide.pending { min-width: 40vw; min-height: 68vh; background: #141414; }
   .flow-slide img, .flow-slide video {
     max-height: 68vh; max-width: 72vw; object-fit: contain; border-radius: 2px;
     box-shadow: 0 0 40px rgba(0,0,0,0.6); display: block;
@@ -820,29 +825,103 @@ function isVideo(filename) {
   return /\.(mp4|webm|mov|m4v|ogv)$/i.test(filename);
 }
 
-function buildThumb(url, filename) {
-  const card = document.createElement('div');
-  card.className = 'thumb';
+// Lazy loading. El grid monta las 1000+ tarjetas de golpe, pero el media queda sin
+// `src` (guardado en data-src) hasta que la tarjeta se acerca al viewport. Así solo
+// pagamos el ancho de banda de lo que se mira de verdad. `loading="lazy"` nativo no
+// vale aquí: las tarjetas sin cargar colapsan a 0px y el navegador las cree visibles.
+// Cuánto precargamos por debajo del viewport. Con 10 columnas cada "fila" son 10
+// archivos, así que un margen generoso multiplica el gasto muy rápido: 600px ≈ 3 filas
+// de colchón, suficiente para que no se vean huecos al scrollear.
+const HYDRATE_MARGIN = '600px 0px';
 
+// El grid es CSS multicolumna: cambiar el alto de una tarjeta rebalancea las columnas
+// y las demás saltan de sitio. Con lazy loading eso pasaría sin parar al scrollear, así
+// que memorizamos la proporción real de cada archivo la primera vez que se ve y la
+// reutilizamos como placeholder exacto. Supabase no expone width/height, de ahí la caché.
+const RATIO_KEY = 'gallery-ratios-v1';
+let ratioCache = {};
+try { ratioCache = JSON.parse(localStorage.getItem(RATIO_KEY)) || {}; } catch { ratioCache = {}; }
+
+let ratioSaveTimer = null;
+function rememberRatio(filename, w, h) {
+  if (!w || !h) return;
+  const ratio = +(w / h).toFixed(3);
+  if (ratioCache[filename] === ratio) return;
+  ratioCache[filename] = ratio;
+  clearTimeout(ratioSaveTimer);
+  ratioSaveTimer = setTimeout(() => {
+    try { localStorage.setItem(RATIO_KEY, JSON.stringify(ratioCache)); } catch {}
+  }, 1000);
+}
+
+function hydrate(card) {
+  // Ojo: `pending` NO se quita aquí. La altura reservada debe seguir en pie hasta que
+  // el media haya cargado de verdad, si no la tarjeta colapsa otra vez a 0px.
+  for (const el of card.querySelectorAll('[data-src]')) {
+    el.src = el.dataset.src;
+    delete el.dataset.src;
+  }
+}
+
+const cardObserver = new IntersectionObserver(entries => {
+  for (const entry of entries) {
+    if (!entry.isIntersecting) continue;
+    hydrate(entry.target);
+    cardObserver.unobserve(entry.target);
+  }
+}, { rootMargin: HYDRATE_MARGIN });
+
+// El media se crea sin `src`: lo hidrata el observer. Los vídeos arrancan con
+// preload="none" para no bajar ni siquiera metadata hasta que hagan falta.
+function buildMedia(url, filename, { alt = '', card = null, autoplay = true } = {}) {
   let media;
+  const settle = () => {
+    rememberRatio(filename,
+      media.naturalWidth  || media.videoWidth,
+      media.naturalHeight || media.videoHeight);
+    media.classList.add('loaded');
+    releaseCard(card);
+  };
+
   if (isVideo(filename)) {
     media = document.createElement('video');
-    media.src = url;
-    media.autoplay = true;
     media.muted = true;
-    media.loop = true;
     media.playsInline = true;
-    media.preload = 'metadata';
+    media.preload = 'none';
+    if (autoplay) { media.autoplay = true; media.loop = true; }
+    media.onloadeddata = settle;
   } else {
     media = document.createElement('img');
-    media.loading = 'lazy';
-    media.src = url;
-    media.alt = filename;
-    media.onload = () => media.classList.add('loaded');
+    media.alt = alt;
+    media.onload = settle;
   }
+  // Si un archivo falla, liberamos la altura igualmente para no dejar un hueco fijo.
+  media.onerror = () => releaseCard(card);
+  media.dataset.src = url;
+  return media;
+}
 
-  card.appendChild(media);
+// Devuelve la tarjeta a su alto natural: el placeholder ya no pinta nada.
+function releaseCard(card) {
+  if (!card) return;
+  card.classList.remove('pending');
+  card.style.aspectRatio = '';
+}
+
+// Placeholder con la proporción real si ya la conocemos; si no, el 3/4 del CSS.
+function reserveSpace(card, filename) {
+  const ratio = ratioCache[filename];
+  if (ratio) card.style.aspectRatio = String(ratio);
+}
+
+function buildThumb(url, filename) {
+  const card = document.createElement('div');
+  card.className = 'thumb pending';
+  reserveSpace(card, filename);
+
+  card.appendChild(buildMedia(url, filename, { alt: filename, card }));
   card.addEventListener('click', () => openLightbox(url, filename));
+  cardObserver.observe(card);
   return card;
 }
 
@@ -850,19 +929,10 @@ function buildFlowCard(flowId, files, name) {
   const firstFile = files[0];
   const { data: { publicUrl } } = supabase.storage.from(BUCKET).getPublicUrl(firstFile.name);
   const card = document.createElement('div');
-  card.className = 'thumb flow-card';
+  card.className = 'thumb flow-card pending';
+  reserveSpace(card, firstFile.name);
 
-  let media;
-  if (isVideo(firstFile.name)) {
-    media = document.createElement('video');
-    media.src = publicUrl;
-    media.autoplay = true; media.muted = true; media.loop = true;
-    media.playsInline = true; media.preload = 'metadata';
-  } else {
-    media = document.createElement('img');
-    media.loading = 'lazy'; media.src = publicUrl; media.alt = name;
-    media.onload = () => media.classList.add('loaded');
-  }
+  const media = buildMedia(publicUrl, firstFile.name, { alt: name, card });
 
   const badge = document.createElement('div');
   badge.className = 'flow-badge';
@@ -873,20 +943,14 @@ function buildFlowCard(flowId, files, name) {
   const previewFiles = files.slice(1, 5); // hasta 4 miniaturas (sin la portada)
   for (const f of previewFiles) {
     const { data: { publicUrl: miniUrl } } = supabase.storage.from(BUCKET).getPublicUrl(f.name);
-    let mini;
-    if (isVideo(f.name)) {
-      mini = document.createElement('video');
-      mini.src = miniUrl; mini.muted = true; mini.preload = 'metadata';
-    } else {
-      mini = document.createElement('img');
-      mini.loading = 'lazy'; mini.src = miniUrl;
-    }
+    const mini = buildMedia(miniUrl, f.name, { alt: f.name, autoplay: false });
     mini.className = 'flow-thumb-mini';
     thumbsRow.appendChild(mini);
   }
 
   card.append(media, badge, thumbsRow);
   card.addEventListener('click', () => openFlowLightbox(flowId, files));
+  cardObserver.observe(card);
   return card;
 }
 
@@ -1293,19 +1357,33 @@ const flowTrack = document.getElementById('flow-track');
 let currentFlowFiles = [];
 let currentFlowId    = null;
 
+// Un flow puede tener decenas de imágenes; solo cargamos las que se acercan al
+// borde de la tira, no las 30 de golpe al abrirlo.
+const slideObserver = new IntersectionObserver(entries => {
+  for (const entry of entries) {
+    if (!entry.isIntersecting) continue;
+    hydrate(entry.target);
+    slideObserver.unobserve(entry.target);
+  }
+}, { root: flowTrack, rootMargin: '0px 1200px' });
+
 function buildFlowSlide(file) {
   const { data: { publicUrl } } = supabase.storage.from(BUCKET).getPublicUrl(file.name);
   const slide = document.createElement('div');
-  slide.className = 'flow-slide';
+  slide.className = 'flow-slide pending';
 
   let media;
   if (isVideo(file.name)) {
     media = document.createElement('video');
-    media.src = publicUrl; media.controls = true; media.playsInline = true;
+    media.controls = true; media.playsInline = true; media.preload = 'none';
+    media.onloadeddata = () => slide.classList.remove('pending');
   } else {
     media = document.createElement('img');
-    media.src = publicUrl; media.loading = 'lazy';
+    media.onload = () => slide.classList.remove('pending');
   }
+  media.onerror = () => slide.classList.remove('pending');
+  media.dataset.src = publicUrl;
+  slideObserver.observe(slide);
 
   const footer = document.createElement('div');
   footer.className = 'flow-slide-footer';
@@ -1366,16 +1444,9 @@ function buildFlowSlide(file) {
         const { data: { publicUrl: pu } } = supabase.storage.from(BUCKET).getPublicUrl(newFirst.name);
         const card = thumbRegistry[regIdx].el;
         const old = card.querySelector('img, video');
-        if (isVideo(newFirst.name)) {
-          const v = document.createElement('video');
-          v.src = pu; v.autoplay = true; v.muted = true; v.loop = true; v.playsInline = true; v.preload = 'metadata';
-          old?.replaceWith(v);
-        } else {
-          const img = document.createElement('img');
-          img.loading = 'lazy'; img.src = pu;
-          img.onload = () => img.classList.add('loaded');
-          old?.replaceWith(img);
-        }
+        const media = buildMedia(pu, newFirst.name, { alt: newFirst.name, card });
+        old?.replaceWith(media);
+        hydrate(card); // la tarjeta ya está a la vista: cargamos sin esperar al observer
       }
     }
     buildFilterBar();
