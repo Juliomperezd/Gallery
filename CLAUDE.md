@@ -104,6 +104,33 @@ CREATE POLICY "public delete" ON links FOR DELETE USING (true);
 - [x] PIN de acceso (auth.js)
 - [x] Desplegado en GitHub Pages
 - [x] Lazy loading del grid (ver sección "Egress" abajo)
+- [x] Keep-alive contra el auto-pause de Supabase (ver sección "Auto-pause" abajo)
+
+## Auto-pause de Supabase — keep-alive
+
+> ⚠️ **El plan free pausa el proyecto tras ~7 días sin actividad, y lo hace en silencio.** Pasó: el proyecto se pausó y estuvo caído **~3 meses sin que nos enterásemos** (último push 2026-07-13, detectado el 2026-10-03). Se recuperó entero desde el dashboard (Restore) sin pérdida de datos.
+
+**Síntoma para diagnosticarlo:** el hostname deja de resolver — `nslookup kqupemycgbpzzkzrsxtw.supabase.co` da **NXDOMAIN**. Al pausar, Supabase retira el registro DNS. Ojo: NXDOMAIN **no distingue "pausado" de "borrado"**, eso hay que mirarlo en el dashboard. Los proyectos pausados acaban siendo elegibles para borrado, así que esto no se puede dejar correr.
+
+**Solución montada (2026-10-03): UptimeRobot.** Dos monitores HTTP cada 5 min, plan free, alertas por email a `jloizz@gmail.com`:
+
+| Monitor | URL |
+|---|---|
+| Web | `https://juliomperezd.github.io/Gallery/` |
+| Supabase (el que mantiene vivo) | `…/rest/v1/image_meta?select=filename&limit=1&apikey=<anon key>` |
+
+Cada ping consulta la BD de verdad y devuelve 56 bytes → ~0,5 MB de egress al mes sobre una cuota de 5 GB (0,01%). El intervalo de 5 min es muy superior a lo necesario (bastaría cada 3 días), pero no cuesta nada y a cambio detecta caídas en 5 minutos en vez de en meses.
+
+Detalles que costaron tiempo y conviene no reaprender:
+- La **apikey funciona como query param**, no hacen falta headers personalizados. Verificado con GET y HEAD, ambos 200. Eso permite usar cualquier servicio de monitorización gratuito.
+- El **validador del formulario de alta** de UptimeRobot rechaza URLs con query params ("Please enter a valid website URL"). Hay que registrarse con una URL simple y crear el monitor real después desde `+ New` en el dashboard.
+- **No usar GitHub Actions** para esto: desactiva los workflows programados tras 60 días sin commits, y la cadencia de commits de este repo es mucho más dispersa.
+- No vale pingear `/rest/v1/` a secas: devuelve **401** sin apikey (UptimeRobot lo marcaría como caído permanente) y además no toca la base de datos.
+- UptimeRobot autogenera el nombre del monitor con el host y **descarta el path**, así que el monitor de la web aparece como `juliomperezd.github.io` aunque por dentro vigile `/Gallery/`. No es un error: el dominio pelado da 404 y se marcaría como caída.
+
+**Si vuelve a caerse:** 1) `nslookup` al hostname para confirmar; 2) dashboard de Supabase → Restore; 3) botón Export de la galería para rehacer el backup; 4) revisar que los monitores de UptimeRobot sigan activos y no pausados. Si el keep-alive falló estando activo, significa que Supabase endureció la detección de actividad → toca migrar (ver "Pendiente").
+
+**Esto es un parche, no una solución.** Es un workaround contra un comportamiento que Supabase diseñó a propósito. No resuelve el techo de storage (~536 MB de 1 GB) ni el de egress. Conviene exportar backup cada pocos meses.
 
 ## Egress de Supabase — lazy loading
 
@@ -123,6 +150,13 @@ Medido con Chromium sobre la librería real: **993 archivos / 522 MB → 176 / 8
 ## Pendiente
 - [ ] Crear iOS Shortcut "Add to Refs" (ver instrucciones abajo)
 - [ ] **Miniaturas.** El grid sigue sirviendo el original (508 KB de media, uno pesa 8 MB) para pintarlo en una columna de ~157px. Es el grueso de los 83 MB que quedan. Generando thumbs WebP al subir (canvas en cliente; la transformación de imágenes de Supabase es de plan Pro) y usando el original solo en el lightbox, bajaría a ~5 MB por visita. Requiere backfill de los ~1055 archivos ya subidos.
+- [ ] **Salir del free tier de Supabase (decisión abierta).** El keep-alive tapa la pausa pero quedan los dos techos: storage ~536 MB de 1 GB, y egress 5 GB/mes. Opciones valoradas el 2026-10-03: (a) migrar a **Cloudflare R2 + D1** — egress cero y 10 GB gratis, mata pausa y egress de golpe, pero implica reescribir la capa de datos; (b) **solo el storage a R2** y metadata en Supabase con keep-alive; (c) replantear de cero, dado que **la galería la usa solo Julio** (lo de "4 personas" de arriba ya no es cierto). Sin prisa mientras el keep-alive aguante.
+
+## Deploy
+
+Editar en local → commit directo en `master` → `git push` → GitHub Pages publica solo. Sin build step, sin ramas, sin PRs (el historial es lineal, 0 merges). Pages está configurado como *source: `master` / `/`*, build legacy, **sin GitHub Actions** — por eso no hay `.github/`. Tarda ~1 min en estar vivo. `.gitignore` excluye `memory/` y `.DS_Store`.
+
+> ⚠️ `config.js` está commiteado en un repo **público** con la anon key de Supabase y el PIN. Funciona por las policies públicas del bucket, pero cualquiera con la URL puede leerlo. Decisión consciente, anotada aquí para que no sorprenda.
 
 ## iOS Shortcut "Add to Refs"
 Aparece en el Share Sheet de Fotos. Sube directo al bucket de Supabase.
